@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://athanor.studio/schemas/azodoc/1.0/publication.schema.json",
+  "title": "Azodoc publication/publication.json (v1.0)",
+  "description": "出版层：某修订 × 某渲染器版本的冻结记录。PDF 工件本体在 compatibility/pdf/，由 artifact.sha256 锚定。",
+  "type": "object",
+  "required": ["schema_version"],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
+    "publications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "source_revision", "created_at", "renderer", "artifact"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string", "pattern": "^pub_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "source_revision": { "type": "string", "pattern": "^rev_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "renderer": {
+            "type": "object",
+            "required": ["name", "version"],
+            "additionalProperties": true,
+            "properties": {
+              "name": { "type": "string" },
+              "version": { "type": "string" },
+              "engine": { "type": "string" }
+            }
+          },
+          "artifact": {
+            "type": "object",
+            "required": ["path", "sha256"],
+            "additionalProperties": true,
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$))[^\\x00\\\\]+$"
+              },
+              "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+            }
+          },
+          "page": {
+            "type": "object",
+            "required": ["count"],
+            "additionalProperties": true,
+            "properties": {
+              "count": { "type": "integer", "minimum": 0 },
+              "size": { "type": "string" }
+            }
+          },
+          "content_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "layout_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "signature": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

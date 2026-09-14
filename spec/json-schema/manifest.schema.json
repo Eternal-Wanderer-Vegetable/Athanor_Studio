@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://athanor.studio/schemas/azodoc/1.0/manifest.schema.json",
+  "title": "Azodoc manifest.json (v1.0)",
+  "description": "包清单。所有对象允许未知成员（R2 前向兼容）；未知成员由读取器原样保留。",
+  "type": "object",
+  "required": ["azodoc", "document", "layers"],
+  "additionalProperties": true,
+  "properties": {
+    "azodoc": {
+      "type": "object",
+      "required": ["format_version"],
+      "additionalProperties": true,
+      "properties": {
+        "format_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
+        "container_profile": { "enum": ["prefixed", "plain_zip"] },
+        "generator": { "$ref": "#/$defs/generator" }
+      }
+    },
+    "document": {
+      "type": "object",
+      "required": ["id", "schema_version"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string", "pattern": "^doc_[0-9A-HJKMNP-TV-Z]{26}$" },
+        "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
+        "title": { "type": "string" },
+        "language": { "type": "string" },
+        "created_at": { "$ref": "#/$defs/datetime" },
+        "modified_at": { "$ref": "#/$defs/datetime" }
+      }
+    },
+    "current_revision": {
+      "type": ["string", "null"],
+      "pattern": "^rev_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "layers": {
+      "type": "object",
+      "required": ["content"],
+      "additionalProperties": { "$ref": "#/$defs/layer_ref" },
+      "properties": {
+        "content": { "$ref": "#/$defs/layer_ref" },
+        "assets": { "$ref": "#/$defs/layer_ref" },
+        "semantics": { "$ref": "#/$defs/layer_ref" },
+        "presentation": { "$ref": "#/$defs/layer_ref" },
+        "revisions": { "$ref": "#/$defs/layer_ref" },
+        "publication": { "$ref": "#/$defs/layer_ref" }
+      }
+    },
+    "compatibility": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/compat_entry" }
+    },
+    "reports": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/report_entry" }
+    },
+    "extra": { "type": "object" }
+  },
+  "$defs": {
+    "generator": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string" }
+      }
+    },
+    "datetime": { "type": "string", "format": "date-time" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "relpath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$))[^\\x00\\\\]+$"
+    },
+    "layer_ref": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "additionalProperties": true,
+      "properties": {
+        "path": { "$ref": "#/$defs/relpath" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "compat_entry": {
+      "type": "object",
+      "required": ["format", "path"],
+      "additionalProperties": true,
+      "properties": {
+        "format": { "type": "string" },
+        "path": { "$ref": "#/$defs/relpath" },
+        "revision": {
+          "type": ["string", "null"],
+          "pattern": "^rev_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "generated_at": { "$ref": "#/$defs/datetime" },
+        "generator": { "$ref": "#/$defs/generator" },
+        "status": { "enum": ["fresh", "stale"] }
+      }
+    },
+    "report_entry": {
+      "type": "object",
+      "required": ["path", "kind"],
+      "additionalProperties": true,
+      "properties": {
+        "path": { "$ref": "#/$defs/relpath" },
+        "kind": { "type": "string" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  }
+}

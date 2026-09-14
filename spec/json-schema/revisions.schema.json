@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://athanor.studio/schemas/azodoc/1.0/revisions.schema.json",
+  "title": "Azodoc revisions/chain.json (v1.0)",
+  "description": "修订链索引。v1 仅实现 snapshot 模式；delta 为未来 minor 的保留枚举位。",
+  "type": "object",
+  "required": ["schema_version"],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
+    "policy": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "mode": { "enum": ["snapshot", "delta"] },
+        "trigger": {
+          "type": "array",
+          "items": {
+            "enum": ["explicit_save", "before_convert", "manual", "scheduled", "import"]
+          }
+        },
+        "max_snapshots": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "head": {
+      "type": ["string", "null"],
+      "pattern": "^rev_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "revisions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/revision" }
+    }
+  },
+  "$defs": {
+    "revision": {
+      "type": "object",
+      "required": ["id", "author", "timestamp", "message", "kind"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string", "pattern": "^rev_[0-9A-HJKMNP-TV-Z]{26}$" },
+        "parent": {
+          "type": ["string", "null"],
+          "pattern": "^rev_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "author": {
+          "type": "object",
+          "required": ["type"],
+          "additionalProperties": true,
+          "properties": {
+            "type": { "enum": ["human", "ai", "importer", "converter", "system"] },
+            "id": { "type": "string" }
+          }
+        },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "message": { "type": "string" },
+        "kind": { "enum": ["snapshot", "delta"] },
+        "path": {
+          "type": "string",
+          "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$))[^\\x00\\\\]+$"
+        },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "changes": { "type": "object" }
+      }
+    }
+  }
+}

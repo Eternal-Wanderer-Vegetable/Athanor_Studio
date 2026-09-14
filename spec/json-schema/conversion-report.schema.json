@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://athanor.studio/schemas/azodoc/1.0/conversion-report.schema.json",
+  "title": "Azodoc conversion report (v1.0)",
+  "description": "跨格式转换报告。summary.loss 按节点计数；每个非 none 计数必须至少对应一条 issue（azodoc-loss.md §4.3）。",
+  "type": "object",
+  "required": ["report_version", "direction", "source", "target", "engine", "status", "summary"],
+  "additionalProperties": true,
+  "properties": {
+    "report_version": { "const": "1.0" },
+    "direction": { "enum": ["import", "export"] },
+    "source": {
+      "type": "object",
+      "required": ["format"],
+      "additionalProperties": true,
+      "properties": {
+        "format": { "type": "string" },
+        "path": { "type": "string" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "target": {
+      "type": "object",
+      "required": ["format"],
+      "additionalProperties": true,
+      "properties": {
+        "format": { "type": "string" },
+        "document_id": { "type": "string", "pattern": "^doc_[0-9A-HJKMNP-TV-Z]{26}$" },
+        "revision": { "type": "string", "pattern": "^rev_[0-9A-HJKMNP-TV-Z]{26}$" },
+        "path": { "type": "string" }
+      }
+    },
+    "engine": {
+      "type": "object",
+      "required": ["name", "version"],
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "converter": { "type": "string" }
+      }
+    },
+    "status": { "enum": ["complete", "partial"] },
+    "summary": {
+      "type": "object",
+      "required": ["loss"],
+      "additionalProperties": true,
+      "properties": {
+        "counts": {
+          "type": "object",
+          "required": ["blocks"],
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "loss": {
+          "type": "object",
+          "required": ["none", "partial", "degraded", "unsupported", "preserved_raw"],
+          "additionalProperties": false,
+          "properties": {
+            "none": { "type": "integer", "minimum": 0 },
+            "partial": { "type": "integer", "minimum": 0 },
+            "degraded": { "type": "integer", "minimum": 0 },
+            "unsupported": { "type": "integer", "minimum": 0 },
+            "preserved_raw": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "feature", "loss_class", "action"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string", "pattern": "^iss_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "feature": { "type": "string" },
+          "loss_class": {
+            "enum": ["none", "partial", "degraded", "unsupported", "preserved_raw"]
+          },
+          "location": { "type": "object" },
+          "action": { "type": "string" },
+          "detail": { "type": "string" },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  }
+}

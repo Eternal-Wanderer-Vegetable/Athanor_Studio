@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://athanor.studio/schemas/azodoc/1.0/assets.schema.json",
+  "title": "Azodoc assets/registry.json (v1.0)",
+  "description": "资产注册表。资产不可变（R7）：写入后 ID 与内容绑定；孤儿资产允许存在，不得自动清除。",
+  "type": "object",
+  "required": ["schema_version"],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
+    "assets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/asset" }
+    }
+  },
+  "$defs": {
+    "asset": {
+      "type": "object",
+      "required": ["id", "filename", "mime", "size", "sha256", "storage"],
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": { "storage": { "const": "embedded" } },
+            "required": ["storage"]
+          },
+          "then": { "required": ["path"] }
+        },
+        {
+          "if": {
+            "properties": { "storage": { "const": "external" } },
+            "required": ["storage"]
+          },
+          "then": { "required": ["url"] }
+        }
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^as_[0-9A-HJKMNP-TV-Z]{26}$" },
+        "filename": { "type": "string", "minLength": 1 },
+        "mime": { "type": "string" },
+        "size": { "type": "integer", "minimum": 0 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "storage": { "enum": ["embedded", "external"] },
+        "path": {
+          "type": "string",
+          "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$))[^\\x00\\\\]+$"
+        },
+        "url": { "type": "string" },
+        "relationship": { "type": "string" }
+      }
+    }
+  }
+}

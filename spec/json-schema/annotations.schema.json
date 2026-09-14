@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://athanor.studio/schemas/azodoc/1.0/annotations.schema.json",
+  "title": "Azodoc semantics/annotations.json (v1.0)",
+  "description": "语义标注层。锚定以 azodoc-model.md §9 纯文本为基准的 text_quote 选择器为主。",
+  "type": "object",
+  "required": ["schema_version", "annotations"],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
+    "annotations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/annotation" }
+    }
+  },
+  "$defs": {
+    "datetime": { "type": "string", "format": "date-time" },
+    "author": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "enum": ["human", "ai", "importer", "converter", "system"] },
+        "id": { "type": "string" }
+      }
+    },
+    "annotation": {
+      "type": "object",
+      "required": ["id", "type", "target", "value", "author", "created_at"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string", "pattern": "^ann_[0-9A-HJKMNP-TV-Z]{26}$" },
+        "type": { "type": "string", "minLength": 1 },
+        "target": {
+          "anyOf": [
+            { "$ref": "#/$defs/document_target" },
+            { "$ref": "#/$defs/section_target" },
+            { "$ref": "#/$defs/block_target" },
+            { "$ref": "#/$defs/asset_target" },
+            { "$ref": "#/$defs/text_quote_target" }
+          ]
+        },
+        "value": { "type": "object" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "source": { "type": "string" },
+        "author": { "$ref": "#/$defs/author" },
+        "created_at": { "$ref": "#/$defs/datetime" }
+      }
+    },
+    "document_target": {
+      "type": "object",
+      "required": ["kind"],
+      "additionalProperties": true,
+      "properties": { "kind": { "const": "document" } }
+    },
+    "section_target": {
+      "type": "object",
+      "required": ["kind", "section"],
+      "additionalProperties": true,
+      "properties": {
+        "kind": { "const": "section" },
+        "section": { "type": "string", "pattern": "^sec_[0-9A-HJKMNP-TV-Z]{26}$" }
+      }
+    },
+    "block_target": {
+      "type": "object",
+      "required": ["kind", "block"],
+      "additionalProperties": true,
+      "properties": {
+        "kind": { "const": "block" },
+        "block": { "type": "string", "pattern": "^blk_[0-9A-HJKMNP-TV-Z]{26}$" }
+      }
+    },
+    "asset_target": {
+      "type": "object",
+      "required": ["kind", "asset"],
+      "additionalProperties": true,
+      "properties": {
+        "kind": { "const": "asset" },
+        "asset": { "type": "string", "pattern": "^as_[0-9A-HJKMNP-TV-Z]{26}$" }
+      }
+    },
+    "text_quote_target": {
+      "type": "object",
+      "required": ["kind", "block", "selector"],
+      "additionalProperties": true,
+      "properties": {
+        "kind": { "const": "text_quote" },
+        "block": { "type": "string", "pattern": "^blk_[0-9A-HJKMNP-TV-Z]{26}$" },
+        "selector": {
+          "type": "object",
+          "required": ["type", "exact"],
+          "additionalProperties": true,
+          "properties": {
+            "type": { "const": "text_quote" },
+            "exact": { "type": "string", "minLength": 1 },
+            "prefix": { "type": "string" },
+            "suffix": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

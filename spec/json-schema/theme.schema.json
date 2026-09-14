@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://athanor.studio/schemas/azodoc/1.0/theme.schema.json",
+  "title": "Azodoc presentation/theme.json (v1.0)",
+  "description": "表现层。css_like 为 CSS 子集（值一律字符串）；layout_hints 为提示而非指令；内容模型不得依赖本层存在。",
+  "type": "object",
+  "required": ["schema_version"],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
+    "theme": { "type": "string" },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "page": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "size": { "type": "string" },
+            "margin": { "type": "string" }
+          }
+        },
+        "base_font": { "type": "string" },
+        "base_size": { "type": "string" }
+      }
+    },
+    "styles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": true,
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "applies_to": { "type": "array", "items": { "type": "string" } },
+          "css_like": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          }
+        }
+      }
+    },
+    "layout_hints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["block", "hint"],
+        "additionalProperties": true,
+        "properties": {
+          "block": { "type": "string", "pattern": "^blk_[0-9A-HJKMNP-TV-Z]{26}$" },
+          "hint": {
+            "enum": [
+              "page-before",
+              "page-after",
+              "page-break",
+              "avoid-break",
+              "float-left",
+              "float-right"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

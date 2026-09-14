@@ -1,0 +1,408 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://athanor.studio/schemas/azodoc/1.0/content.schema.json",
+  "title": "Azodoc content.json — Prima 内容模型 (v1.0)",
+  "description": "Prima 内容真源。块/行内节点允许未知成员；未知节点类型按 azodoc-model.md §8 以 unknown 包装。",
+  "type": "object",
+  "required": ["schema_version", "content"],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
+    "content": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/node" }
+    }
+  },
+  "$defs": {
+    "ulid": "[0-9A-HJKMNP-TV-Z]{26}",
+    "sec_id": { "type": "string", "pattern": "^sec_[0-9A-HJKMNP-TV-Z]{26}$" },
+    "blk_id": { "type": "string", "pattern": "^blk_[0-9A-HJKMNP-TV-Z]{26}$" },
+    "li_id": { "type": "string", "pattern": "^li_[0-9A-HJKMNP-TV-Z]{26}$" },
+    "col_id": { "type": "string", "pattern": "^col_[0-9A-HJKMNP-TV-Z]{26}$" },
+    "row_id": { "type": "string", "pattern": "^row_[0-9A-HJKMNP-TV-Z]{26}$" },
+    "cel_id": { "type": "string", "pattern": "^cel_[0-9A-HJKMNP-TV-Z]{26}$" },
+    "asset_url": {
+      "type": "string",
+      "pattern": "^asset://as_[0-9A-HJKMNP-TV-Z]{26}(/[^\\s]*)?$"
+    },
+    "relpath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$))[^\\x00\\\\]+$"
+    },
+
+    "node": {
+      "anyOf": [
+        { "$ref": "#/$defs/section" },
+        { "$ref": "#/$defs/block" }
+      ]
+    },
+    "block": {
+      "anyOf": [
+        { "$ref": "#/$defs/paragraph" },
+        { "$ref": "#/$defs/heading" },
+        { "$ref": "#/$defs/quote" },
+        { "$ref": "#/$defs/list" },
+        { "$ref": "#/$defs/code_block" },
+        { "$ref": "#/$defs/table" },
+        { "$ref": "#/$defs/figure" },
+        { "$ref": "#/$defs/image" },
+        { "$ref": "#/$defs/horizontal_rule" },
+        { "$ref": "#/$defs/math_block" },
+        { "$ref": "#/$defs/callout" },
+        { "$ref": "#/$defs/embed" },
+        { "$ref": "#/$defs/footnote" },
+        { "$ref": "#/$defs/unknown_block" }
+      ]
+    },
+    "blocks": { "type": "array", "items": { "$ref": "#/$defs/block" } },
+
+    "section": {
+      "type": "object",
+      "required": ["id", "type", "children"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "$ref": "#/$defs/sec_id" },
+        "type": { "const": "section" },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/node" } }
+      }
+    },
+    "paragraph": {
+      "type": "object",
+      "required": ["id", "type", "content"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "$ref": "#/$defs/blk_id" },
+        "type": { "const": "paragraph" },
+        "content": { "$ref": "#/$defs/spans" }
+      }
+    },
+    "heading": {
+      "type": "object",
+      "required": ["id", "type", "level", "content"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "$ref": "#/$defs/blk_id" },
+        "type": { "const": "heading" },
+        "level": { "type": "integer", "minimum": 1, "maximum": 6 },
+        "content": { "$ref": "#/$defs/spans" }
+      }
+    },
+    "quote": {
+      "type": "object",
+      "required": ["id", "type", "children"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "$ref": "#/$defs/blk_id" },
+        "type": { "const": "quote" },
+        "children": { "$ref": "#/$defs/blocks" }
+      }
+    },
+    "list": {
+      "type": "object",
+      "required": ["id", "type", "style", "items"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "$ref": "#/$defs/blk_id" },
+        "type": { "const": "list" },
+        "style": { "enum": ["ordered", "bullet"] },
+        "start": { "type": "integer", "minimum": 1 },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "type", "children"],
+            "additionalProperties": true,
+            "properties": {
+              "id": { "$ref": "#/$defs/li_id" },
+              "type": { "const": "list_item" },
+              "checked": { "type": "boolean" },
+              "children": { "$ref": "#/$defs/blocks" }
+            }
+          }
+        }
+      }
+    },
+    "code_block": {
+      "type": "object",
+      "required": ["id", "type", "text"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "$ref": "#/$defs/blk_id" },
+        "type": { "const": "code_block" },
+        "language": { "type": "string" },
+        "text": { "type": "string" }
+      }
+    },
+    "table": {
+      "type": "object",
+      "required": ["id", "type", "columns", "rows"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "$ref": "#/$defs/blk_id" },
+        "type": { "const": "table" },
+        "header_row": { "type": "boolean" },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id"],
+            "additionalProperties": true,
+            "properties": {
+              "id": { "$ref": "#/$defs/col_id" },
+              "name": { "type": "string" }
+            }
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "cells"],
+            "additionalProperties": true,
+            "properties": {
+              "id": { "$ref": "#/$defs/row_id" },
+              "cells": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["id", "column", "children"],
+                  "additionalProperties": true,
+                  "properties": {
+                    "id": { "$ref": "#/$defs/cel_id" },
+                    "column": { "type": "integer", "minimum": 0 },
+                    "colSpan": { "type": "integer", "minimum": 1 },
+                    "rowSpan": { "type": "integer", "minimum": 1 },
+                    "children": { "$ref": "#/$defs/blocks" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "figure": {
+      "type": "object",
+      "required": ["id", "type", "asset", "alt"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "$ref": "#/$defs/blk_id" },
+        "type": { "const": "figure" },
+        "asset": { "$ref": "#/$defs/asset_url" },
+        "alt": { "type": "string" },
+        "caption": { "$ref": "#/$defs/spans" }
+      }
+    },
+    "image": {
+      "type": "object",
+      "required": ["id", "type", "asset", "alt"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "$ref": "#/$defs/blk_id" },
+        "type": { "const": "image" },
+        "asset": { "$ref": "#/$defs/asset_url" },
+        "alt": { "type": "string" }
+      }
+    },
+    "horizontal_rule": {
+      "type": "object",
+      "required": ["id", "type"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "$ref": "#/$defs/blk_id" },
+        "type": { "const": "horizontal_rule" }
+      }
+    },
+    "math_block": {
+      "type": "object",
+      "required": ["id", "type", "latex"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "$ref": "#/$defs/blk_id" },
+        "type": { "const": "math_block" },
+        "latex": { "type": "string" }
+      }
+    },
+    "callout": {
+      "type": "object",
+      "required": ["id", "type", "variant", "children"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "$ref": "#/$defs/blk_id" },
+        "type": { "const": "callout" },
+        "variant": { "enum": ["note", "tip", "warning", "important"] },
+        "children": { "$ref": "#/$defs/blocks" }
+      }
+    },
+    "embed": {
+      "type": "object",
+      "required": ["id", "type", "asset"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "$ref": "#/$defs/blk_id" },
+        "type": { "const": "embed" },
+        "asset": { "$ref": "#/$defs/asset_url" }
+      }
+    },
+    "footnote": {
+      "type": "object",
+      "required": ["id", "type", "children"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "$ref": "#/$defs/blk_id" },
+        "type": { "const": "footnote" },
+        "children": { "$ref": "#/$defs/blocks" }
+      }
+    },
+    "unknown_block": {
+      "type": "object",
+      "required": ["id", "type", "origin", "loss_class", "summary", "content"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "$ref": "#/$defs/blk_id" },
+        "type": { "const": "unknown" },
+        "origin": { "type": "string" },
+        "loss_class": { "enum": ["preserved_raw", "unsupported"] },
+        "summary": { "type": "string", "minLength": 1 },
+        "payload_ref": { "$ref": "#/$defs/relpath" },
+        "content": { "const": [] }
+      },
+      "if": {
+        "properties": { "loss_class": { "const": "preserved_raw" } },
+        "required": ["loss_class"]
+      },
+      "then": { "required": ["payload_ref"] }
+    },
+
+    "spans": { "type": "array", "items": { "$ref": "#/$defs/span" } },
+    "span": {
+      "anyOf": [
+        { "$ref": "#/$defs/text" },
+        { "$ref": "#/$defs/hard_break" },
+        { "$ref": "#/$defs/strong" },
+        { "$ref": "#/$defs/em" },
+        { "$ref": "#/$defs/underline" },
+        { "$ref": "#/$defs/strike" },
+        { "$ref": "#/$defs/code_span" },
+        { "$ref": "#/$defs/link" },
+        { "$ref": "#/$defs/footnote_ref" },
+        { "$ref": "#/$defs/inline_math" },
+        { "$ref": "#/$defs/inline_image" },
+        { "$ref": "#/$defs/mention" },
+        { "$ref": "#/$defs/cite_span" },
+        { "$ref": "#/$defs/unknown_span" }
+      ]
+    },
+    "text": {
+      "type": "object",
+      "required": ["type", "text"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "text" },
+        "text": { "type": "string" }
+      }
+    },
+    "hard_break": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": { "type": { "const": "hard_break" } }
+    },
+    "strong": { "$ref": "#/$defs/container_span_impl", "properties": { "type": { "const": "strong" } } },
+    "em": { "$ref": "#/$defs/container_span_impl", "properties": { "type": { "const": "em" } } },
+    "underline": { "$ref": "#/$defs/container_span_impl", "properties": { "type": { "const": "underline" } } },
+    "strike": { "$ref": "#/$defs/container_span_impl", "properties": { "type": { "const": "strike" } } },
+    "container_span_impl": {
+      "type": "object",
+      "required": ["type", "content"],
+      "additionalProperties": true,
+      "properties": {
+        "content": { "$ref": "#/$defs/spans" }
+      }
+    },
+    "code_span": {
+      "type": "object",
+      "required": ["type", "text"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "code" },
+        "text": { "type": "string" }
+      }
+    },
+    "link": {
+      "type": "object",
+      "required": ["type", "url", "content"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "link" },
+        "url": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "$ref": "#/$defs/spans" }
+      }
+    },
+    "footnote_ref": {
+      "type": "object",
+      "required": ["type", "id"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "footnote_ref" },
+        "id": { "$ref": "#/$defs/blk_id" }
+      }
+    },
+    "inline_math": {
+      "type": "object",
+      "required": ["type", "latex"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "inline_math" },
+        "latex": { "type": "string" }
+      }
+    },
+    "inline_image": {
+      "type": "object",
+      "required": ["type", "asset", "alt"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "inline_image" },
+        "asset": { "$ref": "#/$defs/asset_url" },
+        "alt": { "type": "string" }
+      }
+    },
+    "mention": {
+      "type": "object",
+      "required": ["type", "target"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "mention" },
+        "target": { "type": "string" }
+      }
+    },
+    "cite_span": {
+      "type": "object",
+      "required": ["type", "key"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "cite" },
+        "key": { "type": "string" }
+      }
+    },
+    "unknown_span": {
+      "type": "object",
+      "required": ["type", "origin", "loss_class", "summary", "content"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "unknown" },
+        "origin": { "type": "string" },
+        "loss_class": { "enum": ["preserved_raw", "unsupported"] },
+        "summary": { "type": "string", "minLength": 1 },
+        "payload_ref": { "$ref": "#/$defs/relpath" },
+        "content": { "const": [] }
+      },
+      "if": {
+        "properties": { "loss_class": { "const": "preserved_raw" } },
+        "required": ["loss_class"]
+      },
+      "then": { "required": ["payload_ref"] }
+    }
+  }
+}
