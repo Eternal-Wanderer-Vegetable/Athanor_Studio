@@ -728,8 +728,8 @@ Prima ──► Pandoc AST ──► pandoc -f json -o docx
 ## 14. 下一步行动
 
 1. ~~确认 D4 命名提案~~ —— 已确认：**Azodoc / `.azodoc`**（2026-09-14）。
-2. **M0 已交付（2026-09-14）**：`spec/` 四份正式规范 + 8 份 JSON Schema + 3 个黄金样例（`spec/examples/`）。程序化验收已通过；剩余人工项（资源管理器/7-Zip GUI 打开、规范评审签署）见 `spec/README.md` 验收清单。
-3. M0 评审通过后初始化 `engine/` Rust workspace，进入 M1。
+2. ~~M0 规范包~~ —— 已交付并签署（2026-09-14）：`spec/` 四份正式规范 + 8 份 JSON Schema + 3 个黄金样例。
+3. **M1 已交付（2026-09-14）**：`engine/` Rust workspace（azodoc-model / azodoc-container / athanor-cli），CLI 支持 new/info/verify/recover，26 项测试全绿，M1 四项验收全部通过（对照见 `engine/README.md`）。下一步进入 **M2**：Markdown/HTML 转换器 + 损失报告引擎。
 
 ---
 

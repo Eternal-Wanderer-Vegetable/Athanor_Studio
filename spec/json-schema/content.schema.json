@@ -14,7 +14,6 @@
     }
   },
   "$defs": {
-    "ulid": "[0-9A-HJKMNP-TV-Z]{26}",
     "sec_id": { "type": "string", "pattern": "^sec_[0-9A-HJKMNP-TV-Z]{26}$" },
     "blk_id": { "type": "string", "pattern": "^blk_[0-9A-HJKMNP-TV-Z]{26}$" },
     "li_id": { "type": "string", "pattern": "^li_[0-9A-HJKMNP-TV-Z]{26}$" },

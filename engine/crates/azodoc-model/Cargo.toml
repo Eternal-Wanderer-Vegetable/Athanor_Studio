@@ -1,0 +1,17 @@
+[package]
+name = "azodoc-model"
+description = "Azodoc Prima 内容模型、manifest 类型与结构校验（Athanor 引擎核心）"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+schemars.workspace = true
+thiserror.workspace = true
+ulid.workspace = true
+
+[dev-dependencies]
+zip.workspace = true
+jsonschema = "0.56"

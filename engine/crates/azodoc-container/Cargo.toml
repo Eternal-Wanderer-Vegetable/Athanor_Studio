@@ -1,0 +1,15 @@
+[package]
+name = "azodoc-container"
+description = "Azodoc 物理容器：Header、ZIP、探测与恢复、保真重写（Athanor 引擎核心）"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+azodoc-model = { path = "../azodoc-model" }
+serde_json.workspace = true
+thiserror.workspace = true
+crc32fast.workspace = true
+zip.workspace = true
+flate2.workspace = true
+sha2.workspace = true
