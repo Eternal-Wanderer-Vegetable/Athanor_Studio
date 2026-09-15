@@ -15,9 +15,11 @@
 
 //! M5 命令：PDF 出版（publish）。
 //!
-//! 管线：Prima →（azodoc-html）→ 语义 HTML →（印刷 CSS 注入）→ 无头 Chromium 打印
-//! → PDF。publication.json 记录冻结出版状态（source_revision / 渲染器指纹 /
-//! content_hash / layout_hash / artifact sha256），落地方案 §14 的 Publication Layer。
+//! 管线：Prima →（azodoc-html）→ 语义 HTML →（印刷 CSS 注入）→ 无头 Chromium
+//! → PDF。默认走 CDP + Paged.js 分页（页码边盒/运行头，Future Work §B1），
+//! 失败或 `--no-paged` 时回退 CLI 直印。publication.json 记录冻结出版状态
+//! （source_revision / 渲染器指纹 / content_hash / layout_hash / artifact
+//! sha256），落地方案 §14 的 Publication Layer。
 
 use azodoc_container::{Container, ContainerError};
 use azodoc_convert::{ExportAsset, ExportDoc};
@@ -26,7 +28,7 @@ use std::path::{Path, PathBuf};
 
 use crate::{die, read_container, sha256_hex};
 
-pub const PRINT_CSS_VERSION: &str = "print-css-v1";
+pub const PRINT_CSS_VERSION: &str = "print-css-v2";
 pub const PRINT_CSS: &str = "@page { size: A4; margin: 22mm 18mm; } \
 h1,h2,h3,h4,h5,h6 { break-after: avoid; } \
 table, figure, pre { break-inside: avoid; } \
@@ -144,6 +146,59 @@ pub struct PublishArgs<'a> {
     pub out: Option<&'a Path>,
     /// 浏览器路径（覆盖 AZODOC_BROWSER_PATH / 自动定位）
     pub browser: Option<&'a str>,
+    /// 跳过 Paged.js 分页，直接用 Chromium CLI 直印（无页码边盒/运行头）
+    pub no_paged: bool,
+}
+
+/// CLI 直印（回退路径）：无头 `--print-to-pdf`。
+fn print_plain(
+    browser: &azodoc_pdf::Browser,
+    html_path: &Path,
+    pdf_path: &Path,
+) -> Result<(Vec<u8>, Option<u64>), String> {
+    azodoc_pdf::print_html_to_pdf(browser, html_path, pdf_path, azodoc_pdf::DEFAULT_TIMEOUT)
+        .map_err(|e| e.friendly())?;
+    let pdf_bytes = std::fs::read(pdf_path).map_err(|e| format!("PDF 读取失败: {e}"))?;
+    if !pdf_bytes.starts_with(b"%PDF") {
+        return Err("产物不是有效 PDF".to_string());
+    }
+    let pages = azodoc_pdf::pdf_page_count(&pdf_bytes);
+    Ok((pdf_bytes, pages))
+}
+
+/// CDP + Paged.js 打印（默认路径）：等异步分页完成后再打印，返回
+/// DOM 实数页数与首页页脚（页码）文本样本。
+fn print_paged(
+    browser: &azodoc_pdf::Browser,
+    tmp: &Path,
+    print_html: &str,
+    title: Option<&str>,
+) -> Result<(Vec<u8>, u64, Option<String>), String> {
+    let paged_html = azodoc_pdf::augment_print_html(print_html, title);
+    let html_path = tmp.join("print-paged.html");
+    std::fs::write(&html_path, paged_html.as_bytes())
+        .map_err(|e| format!("印刷 HTML 写入失败: {e}"))?;
+    azodoc_pdf::write_polyfill_assets(tmp).map_err(|e| format!("polyfill 写入失败: {e}"))?;
+    let pdf_path = tmp.join("document.pdf");
+    let info = azodoc_pdf::print_html_to_pdf_paged(
+        browser,
+        &html_path,
+        &pdf_path,
+        azodoc_pdf::DEFAULT_TIMEOUT,
+    )
+    .map_err(|e| e.friendly())?;
+    let pdf_bytes = std::fs::read(&pdf_path).map_err(|e| format!("PDF 读取失败: {e}"))?;
+    if !pdf_bytes.starts_with(b"%PDF") {
+        return Err("产物不是有效 PDF".to_string());
+    }
+    Ok((pdf_bytes, info.page_count, info.footer_sample))
+}
+
+/// 直印失败时的统一退出（清理临时目录）。
+fn print_failed(tmp: &Path, msg: &str) -> i32 {
+    eprintln!("错误：{msg}");
+    let _ = std::fs::remove_dir_all(tmp);
+    1
 }
 
 pub fn cmd_publish(path: &Path, args: &PublishArgs) -> i32 {
@@ -166,7 +221,7 @@ pub fn cmd_publish(path: &Path, args: &PublishArgs) -> i32 {
         &format!("<style id=\"azodoc-print\">{}</style>\n</head>", PRINT_CSS),
     );
 
-    // 2. 无头打印
+    // 2. 无头打印：默认 CDP + Paged.js 分页（页码/运行头）；失败或 --no-paged 回退直印
     let browser = match azodoc_pdf::find_browser() {
         Ok(b) => b,
         Err(e) => {
@@ -185,25 +240,32 @@ pub fn cmd_publish(path: &Path, args: &PublishArgs) -> i32 {
         eprintln!("错误：印刷 HTML 写入失败: {e}");
         return 1;
     }
-    if let Err(e) =
-        azodoc_pdf::print_html_to_pdf(&browser, &html_path, &pdf_path, azodoc_pdf::DEFAULT_TIMEOUT)
-    {
-        eprintln!("{}", e.friendly());
-        let _ = std::fs::remove_dir_all(&tmp);
-        return 1;
-    }
-    let pdf_bytes = match std::fs::read(&pdf_path) {
-        Ok(b) => b,
-        Err(e) => {
-            eprintln!("错误：PDF 读取失败: {e}");
-            return 1;
+
+    let plain_engine = format!("chromium-print ({})", browser.path.display());
+    let (pdf_bytes, pages, engine_desc, mode, footer_sample) = if args.no_paged {
+        match print_plain(&browser, &html_path, &pdf_path) {
+            Ok((b, p)) => (b, p, plain_engine, "plain", None),
+            Err(msg) => return print_failed(&tmp, &msg),
+        }
+    } else {
+        match print_paged(&browser, &tmp, &print_html, doc.title.as_deref()) {
+            Ok((b, p, f)) => (
+                b,
+                Some(p),
+                format!("chromium-cdp/pagedjs ({})", browser.path.display()),
+                "pagedjs",
+                f,
+            ),
+            Err(warn) => {
+                eprintln!("警告：Paged.js 分页不可用，回退 Chromium 直印。");
+                eprintln!("  原因：{warn}");
+                match print_plain(&browser, &html_path, &pdf_path) {
+                    Ok((b, p)) => (b, p, plain_engine, "plain", None),
+                    Err(msg) => return print_failed(&tmp, &msg),
+                }
+            }
         }
     };
-    if !pdf_bytes.starts_with(b"%PDF") {
-        eprintln!("错误：产物不是有效 PDF");
-        return 1;
-    }
-    let pages = azodoc_pdf::pdf_page_count(&pdf_bytes);
 
     // 3. 出版记录
     let content_bytes = c
@@ -219,6 +281,8 @@ pub fn cmd_publish(path: &Path, args: &PublishArgs) -> i32 {
         h.update(browser.fingerprint.as_bytes());
         h.update(content_hash.as_bytes());
         h.update(PRINT_CSS_VERSION.as_bytes());
+        // 分页模式影响分页点与边盒，必须参与布局指纹
+        h.update(mode.as_bytes());
         let d = h.finalize();
         d.iter().map(|b| format!("{b:02x}")).collect::<String>()
     };
@@ -233,7 +297,7 @@ pub fn cmd_publish(path: &Path, args: &PublishArgs) -> i32 {
         "renderer": {
             "name": "athanor-pdf",
             "version": env!("CARGO_PKG_VERSION"),
-            "engine": format!("chromium-print ({})", browser.path.display()),
+            "engine": engine_desc,
             "fingerprint": browser.fingerprint,
         },
         "artifact": {"path": artifact_path, "sha256": pdf_sha},
@@ -392,6 +456,10 @@ pub fn cmd_publish(path: &Path, args: &PublishArgs) -> i32 {
     );
     println!("  修订: {}", revision.as_deref().unwrap_or("<无>"));
     println!("  产物: {artifact_path}（sha256 {pdf_sha}…）");
+    println!("  分页: {mode}");
+    if let Some(f) = &footer_sample {
+        println!("  页脚样本: {f:?}");
+    }
     println!("  layout_hash: {layout_hash}");
     0
 }

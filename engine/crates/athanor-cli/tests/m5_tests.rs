@@ -60,6 +60,7 @@ fn publish_e2e_and_deterministic_layout_hash() {
             &athanor_cli::PublishArgs {
                 out: Some(&dir.join("first.pdf")),
                 browser: None,
+                no_paged: false,
             }
         ),
         0
@@ -96,6 +97,7 @@ fn publish_e2e_and_deterministic_layout_hash() {
             &athanor_cli::PublishArgs {
                 out: None,
                 browser: None,
+                no_paged: false,
             }
         ),
         0
@@ -139,7 +141,8 @@ fn publish_tampered_artifact_is_detected() {
             &doc,
             &athanor_cli::PublishArgs {
                 out: None,
-                browser: None
+                browser: None,
+                no_paged: false,
             }
         ),
         0

@@ -88,7 +88,7 @@ enum Command {
     },
     /// 重建所有过期（stale）的兼容缓存
     Upgrade { path: PathBuf },
-    /// 出版为 PDF（无头 Chromium 打印）并写入 publication 记录
+    /// 出版为 PDF（默认 CDP + Paged.js 分页；失败回退直印）并写入 publication 记录
     Publish {
         path: PathBuf,
         /// 额外把 PDF 复制到该路径
@@ -97,6 +97,9 @@ enum Command {
         /// 浏览器路径（覆盖自动定位）
         #[arg(long)]
         browser: Option<String>,
+        /// 跳过 Paged.js 分页（回退 Chromium 直印，无页码边盒/运行头）
+        #[arg(long)]
+        no_paged: bool,
     },
     /// 显示修订链
     History {
@@ -187,11 +190,17 @@ fn main() {
             strict_loss,
         } => cmd_transmute(&path, &to, out.as_deref(), no_cache, strict_loss),
         Command::Upgrade { path } => cmd_upgrade(&path),
-        Command::Publish { path, out, browser } => athanor_cli::cmd_publish(
+        Command::Publish {
+            path,
+            out,
+            browser,
+            no_paged,
+        } => athanor_cli::cmd_publish(
             &path,
             &athanor_cli::PublishArgs {
                 out: out.as_deref(),
                 browser: browser.as_deref(),
+                no_paged,
             },
         ),
         Command::History { path, json } => athanor_cli::cmd_history(&path, json),

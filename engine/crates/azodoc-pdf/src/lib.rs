@@ -18,6 +18,17 @@
 //! 浏览器查找顺序：`AZODOC_BROWSER_PATH` → PATH（msedge/chrome）→
 //! Windows 标准安装位置 → 各级 `tools/` 目录。Windows 上 Edge 随系统自带，
 //! 通常无需额外安装。
+//!
+//! 两条打印路径：
+//! - [`paged`]：CDP + Paged.js 分页（页码边盒/运行头，出版品质，默认）；
+//! - CLI 直印（`print_html_to_pdf`）：无头 `--print-to-pdf`，作为回退。
+
+mod cdp;
+pub mod paged;
+
+pub use paged::{
+    augment_print_html, print_html_to_pdf_paged, write_polyfill_assets, PagedRenderInfo, PAGED_CSS,
+};
 
 use std::io::Write as IoWrite;
 use std::path::{Path, PathBuf};
@@ -36,6 +47,10 @@ pub enum PdfError {
     Timeout { timeout_secs: u64 },
     #[error("PDF 产物异常: {0}")]
     BadOutput(String),
+    #[error("CDP 会话失败: {0}")]
+    Cdp(String),
+    #[error("Paged.js 分页失败: {0}")]
+    Paged(String),
     #[error("IO 错误: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -55,6 +70,10 @@ impl PdfError {
                     "错误：{self}\n建议：确认浏览器版本较新（需支持 --headless --print-to-pdf）。"
                 )
             }
+            PdfError::Cdp(_) | PdfError::Paged(_) => format!(
+                "错误：{self}\n建议：确认浏览器版本较新（Chromium 90+）；\
+                 或用 --no-paged 回退 Chromium 直印（无页码边盒）。"
+            ),
             _ => format!("错误：{self}\n建议：检查运行环境后重试。"),
         }
     }

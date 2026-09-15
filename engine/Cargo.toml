@@ -34,6 +34,7 @@ markup5ever_rcdom = "0.39"
 base64 = "0.23"
 tendril = "0.5"
 ureq = { version = "2", features = ["json"] }
+tungstenite = { version = "0.27", default-features = false, features = ["handshake"] }
 
 [profile.release]
 lto = "thin"
