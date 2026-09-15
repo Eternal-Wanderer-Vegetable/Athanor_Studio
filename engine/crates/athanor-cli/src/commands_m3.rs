@@ -27,10 +27,6 @@ fn now() -> String {
     azodoc_container::builder::rfc3339_now()
 }
 
-fn generator() -> Value {
-    json!({ "name": "athanor", "version": env!("CARGO_PKG_VERSION") })
-}
-
 fn pretty(v: &Value) -> Vec<u8> {
     let mut b = serde_json::to_vec_pretty(v).expect("序列化失败");
     b.push(b'\n');

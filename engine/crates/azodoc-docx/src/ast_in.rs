@@ -44,7 +44,7 @@ pub fn ast_to_prima(ast: &Value, ctx: &mut ImportCtx) -> Value {
     for b in blocks {
         out.extend(map_block(b, ctx));
     }
-    out.extend(ctx.pending_footnotes.drain(..));
+    out.append(&mut ctx.pending_footnotes);
     let content = json!({
         "schema_version": "1.0",
         "content": wrap_sections(&mut ctx.job.idgen, out),
@@ -493,11 +493,7 @@ fn resolve_media(url: &str, ctx: &mut ImportCtx) -> String {
         );
     }
     // --extract-media 的相对路径
-    let path = if url.starts_with("media/") {
-        ctx.extract_dir.join(url)
-    } else {
-        ctx.extract_dir.join(url)
-    };
+    let path = ctx.extract_dir.join(url);
     if let Ok(bytes) = std::fs::read(&path) {
         let name = url
             .rsplit(['/', '\\'])
@@ -622,7 +618,7 @@ fn flat_blocks(blocks: &[Value], ctx: &mut ImportCtx) -> Vec<Value> {
 
 fn take_pending(mut content: Vec<Value>, ctx: &mut ImportCtx) -> Vec<Value> {
     if !ctx.pending_blocks.is_empty() {
-        content.extend(ctx.pending_blocks.drain(..));
+        content.append(&mut ctx.pending_blocks);
     }
     content
 }
@@ -833,7 +829,7 @@ fn map_inline(node: &Value, ctx: &mut ImportCtx) -> Vec<Value> {
                 "ast_inline_fallback",
                 None,
                 "degraded",
-                &other,
+                other,
                 format!("Pandoc 行内类型 {other} 无精确映射，按子内容降级处理"),
             );
             map_inlines(&c_of(node), ctx)

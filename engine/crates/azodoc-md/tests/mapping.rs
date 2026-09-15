@@ -109,7 +109,7 @@ fn footnote_roundtrip_is_lossless() {
 
 #[test]
 fn underline_export_is_partial() {
-    let out = import("plain\n");
+    let _out = import("plain\n");
     // 构造带 underline 的内容走 MD 导出
     let content = serde_json::json!({
         "schema_version": "1.0",

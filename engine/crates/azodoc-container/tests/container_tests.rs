@@ -265,7 +265,7 @@ fn recover_mode_b_handles_destroyed_central_directory() {
     // 破坏中央目录：把 EOCD 与中央目录区域覆盖为垃圾
     let cut = data.len() * 2 / 3;
     let mut damaged = data[..cut].to_vec();
-    damaged.extend(std::iter::repeat(b'\xDE').take(64));
+    damaged.extend(std::iter::repeat_n(b'\xDE', 64));
     let out_dir = std::env::temp_dir().join(format!("athanor-recover-b-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out_dir);
 

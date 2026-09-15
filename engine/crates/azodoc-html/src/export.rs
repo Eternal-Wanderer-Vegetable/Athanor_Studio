@@ -76,7 +76,7 @@ pub fn export_html(doc: &ExportDoc, log: &mut LossLog) -> String {
 
     if let Some(arr) = doc.content.get("content").and_then(Value::as_array) {
         for node in arr {
-            out.push_str(&block_html(node, &ctx, log, 0));
+            out.push_str(&block_html(node, &ctx, log));
         }
     }
 
@@ -86,7 +86,7 @@ pub fn export_html(doc: &ExportDoc, log: &mut LossLog) -> String {
             let mut inner = String::new();
             if let Some(children) = def.get("children").and_then(Value::as_array) {
                 for c in children {
-                    inner.push_str(&block_html(c, &ctx, log, 1));
+                    inner.push_str(&block_html(c, &ctx, log));
                 }
             }
             out.push_str(&format!(
@@ -138,7 +138,7 @@ fn find_fn_def(v: Option<&Value>, id: &str) -> Option<Value> {
     None
 }
 
-fn block_html(node: &Value, ctx: &HtmlCtx, log: &mut LossLog, depth: usize) -> String {
+fn block_html(node: &Value, ctx: &HtmlCtx, log: &mut LossLog) -> String {
     let t = node.get("type").and_then(Value::as_str).unwrap_or("");
     match t {
         "section" => {
@@ -147,7 +147,7 @@ fn block_html(node: &Value, ctx: &HtmlCtx, log: &mut LossLog, depth: usize) -> S
             let mut inner = String::new();
             if let Some(children) = node.get("children").and_then(Value::as_array) {
                 for c in children {
-                    inner.push_str(&block_html(c, ctx, log, depth + 1));
+                    inner.push_str(&block_html(c, ctx, log));
                 }
             }
             inner
@@ -172,7 +172,7 @@ fn block_html(node: &Value, ctx: &HtmlCtx, log: &mut LossLog, depth: usize) -> S
             let mut inner = String::new();
             if let Some(children) = node.get("children").and_then(Value::as_array) {
                 for c in children {
-                    inner.push_str(&block_html(c, ctx, log, depth + 1));
+                    inner.push_str(&block_html(c, ctx, log));
                 }
             }
             format!("<blockquote>\n{inner}</blockquote>\n")
@@ -197,7 +197,7 @@ fn block_html(node: &Value, ctx: &HtmlCtx, log: &mut LossLog, depth: usize) -> S
                     }
                     if let Some(children) = item.get("children").and_then(Value::as_array) {
                         for (i, c) in children.iter().enumerate() {
-                            let rendered = block_html(c, ctx, log, depth + 1);
+                            let rendered = block_html(c, ctx, log);
                             if i == 0 && c.get("type").and_then(Value::as_str) == Some("paragraph")
                             {
                                 li_inner.push_str(
@@ -250,7 +250,7 @@ fn block_html(node: &Value, ctx: &HtmlCtx, log: &mut LossLog, depth: usize) -> S
                             let mut cell_inner = String::new();
                             if let Some(children) = c.get("children").and_then(Value::as_array) {
                                 for ch in children {
-                                    cell_inner.push_str(&block_html(ch, ctx, log, depth + 1));
+                                    cell_inner.push_str(&block_html(ch, ctx, log));
                                 }
                             }
                             row_html.push_str(&format!(
@@ -325,7 +325,7 @@ fn block_html(node: &Value, ctx: &HtmlCtx, log: &mut LossLog, depth: usize) -> S
             let mut inner = String::new();
             if let Some(children) = node.get("children").and_then(Value::as_array) {
                 for c in children {
-                    inner.push_str(&block_html(c, ctx, log, depth + 1));
+                    inner.push_str(&block_html(c, ctx, log));
                 }
             }
             log.node_none();
@@ -427,7 +427,7 @@ fn block_html(node: &Value, ctx: &HtmlCtx, log: &mut LossLog, depth: usize) -> S
             for key in ["children", "items"] {
                 if let Some(children) = node.get(key).and_then(Value::as_array) {
                     for c in children {
-                        s.push_str(&block_html(c, ctx, log, depth + 1));
+                        s.push_str(&block_html(c, ctx, log));
                     }
                 }
             }

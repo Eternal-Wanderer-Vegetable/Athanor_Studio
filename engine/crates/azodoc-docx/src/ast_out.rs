@@ -19,8 +19,6 @@
 use azodoc_convert::{ExportDoc, LossClass, LossLog};
 use serde_json::{json, Map, Value};
 
-/// Pandoc Attr 三元组 (id, classes, keyvals) 的空值。
-const ATTRS: Value = Value::Null; // 占位（下方用函数构造）
 fn attrs() -> Value {
     json!(["", [], []])
 }

@@ -54,9 +54,9 @@ fn asset_ids(content: &serde_json::Value) -> Vec<String> {
 /// md → azodoc → md → azodoc：内容树恒等。
 fn assert_roundtrip_identity(md_text: &str) {
     let first = import_md(md_text, None);
-    let mut doc = doc_from(&first.content, &first, &Vec::new());
+    let doc = doc_from(&first.content, &first, &Vec::new());
     let mut export_log = azodoc_convert::LossLog::new();
-    let md2 = azodoc_md::export_markdown(&mut doc, &mut export_log);
+    let md2 = azodoc_md::export_markdown(&doc, &mut export_log);
 
     let second = import_md(&md2, None);
 

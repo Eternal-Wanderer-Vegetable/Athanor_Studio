@@ -282,7 +282,7 @@ fn check_node(
             }
         }
         "callout" => match node.get("variant").and_then(Value::as_str) {
-            Some(v) if matches!(v, "note" | "tip" | "warning" | "important") => {}
+            Some("note" | "tip" | "warning" | "important") => {}
             _ => issues.push(Issue::error(
                 "callout.variant",
                 path,
@@ -298,7 +298,7 @@ fn check_node(
                 ));
             }
         }
-        "unknown" => check_unknown_fields(node, &path, ctx, issues),
+        "unknown" => check_unknown_fields(node, path, ctx, issues),
         _ => {}
     }
 

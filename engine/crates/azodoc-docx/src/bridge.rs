@@ -54,12 +54,12 @@ impl DocxError {
                  解压到仓库 tools/pandoc-3.11/ 即可被自动发现）\n\
                  2. 指定路径: 设置环境变量 AZODOC_PANDOC_PATH 指向 pandoc 可执行文件"
             ),
-            DocxError::PandocFailed { stderr, .. } => format!(
+            DocxError::PandocFailed { .. } => format!(
                 "错误：{self}\n输入文件可能不是有效的 DOCX。建议：\n\
                  1. 用 Word/LibreOffice 打开确认文件可读\n\
                  2. 将完整错误信息提交 issue"
             ),
-            DocxError::Timeout { timeout_secs } => format!(
+            DocxError::Timeout { timeout_secs: _ } => format!(
                 "错误：{self}\n文件可能异常复杂或损坏。建议：\n\
                  1. 用 Word/LibreOffice 确认文件可读\n\
                  2. 尝试拆分文档后重试"

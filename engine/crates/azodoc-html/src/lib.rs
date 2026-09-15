@@ -91,7 +91,7 @@ fn element_name(h: &Handle) -> Option<String> {
     }
 }
 
-fn attr<'a>(h: &Handle, key: &str) -> Option<String> {
+fn attr(h: &Handle, key: &str) -> Option<String> {
     if let NodeData::Element { attrs, .. } = &h.data {
         for a in attrs.borrow().iter() {
             if a.name.local.to_string().eq_ignore_ascii_case(key) {
@@ -248,7 +248,7 @@ fn body_blocks(h: &Handle, job: &mut ImportJob, log: &mut LossLog) -> Vec<Value>
                         "template 元素内容未导入".to_string(),
                     );
                 }
-                KNOWN_INLINE if is_inline_tag(KNOWN_INLINE) => {
+                n if is_inline_tag(n) => {
                     // 块级上下文里出现裸行内元素：聚合成段落
                     let spans = inline_node(h, job, log);
                     if !spans.is_empty() {

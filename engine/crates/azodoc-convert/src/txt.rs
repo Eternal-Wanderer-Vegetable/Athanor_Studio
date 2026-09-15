@@ -26,7 +26,7 @@ pub fn export_txt(doc: &ExportDoc, log: &mut LossLog) -> String {
     let mut out = String::new();
     if let Some(arr) = doc.content.get("content").and_then(Value::as_array) {
         for node in arr {
-            out.push_str(&render_block(node, &ctx, 0));
+            out.push_str(&render_block(node, &ctx));
         }
     }
     // 脚注定义集中到末尾
@@ -106,14 +106,14 @@ fn number_refs(v: Option<&Value>, nums: &mut HashMap<String, usize>) {
     }
 }
 
-fn render_block(node: &Value, ctx: &TxtCtx, depth: usize) -> String {
+fn render_block(node: &Value, ctx: &TxtCtx) -> String {
     let t = node.get("type").and_then(Value::as_str).unwrap_or("");
     match t {
         "section" => {
             let mut s = String::new();
             if let Some(children) = node.get("children").and_then(Value::as_array) {
                 for c in children {
-                    s.push_str(&render_block(c, ctx, depth));
+                    s.push_str(&render_block(c, ctx));
                 }
             }
             s
@@ -123,7 +123,7 @@ fn render_block(node: &Value, ctx: &TxtCtx, depth: usize) -> String {
             let level = node.get("level").and_then(Value::as_i64).unwrap_or(1);
             let ch = if level <= 1 { '=' } else { '-' };
             let width = visual_width(&text).max(1);
-            let underline: String = std::iter::repeat(ch).take(width).collect();
+            let underline: String = std::iter::repeat_n(ch, width).collect();
             format!("{text}\n{underline}\n\n")
         }
         "paragraph" => {
@@ -138,7 +138,7 @@ fn render_block(node: &Value, ctx: &TxtCtx, depth: usize) -> String {
             let mut inner = String::new();
             if let Some(children) = node.get("children").and_then(Value::as_array) {
                 for c in children {
-                    inner.push_str(&render_block(c, ctx, depth));
+                    inner.push_str(&render_block(c, ctx));
                 }
             }
             inner
@@ -168,7 +168,7 @@ fn render_block(node: &Value, ctx: &TxtCtx, depth: usize) -> String {
                     let mut first = true;
                     if let Some(children) = item.get("children").and_then(Value::as_array) {
                         for c in children {
-                            let rendered = render_block(c, ctx, depth + 1);
+                            let rendered = render_block(c, ctx);
                             for (li, line) in rendered.lines().enumerate() {
                                 if first {
                                     s.push_str(&format!("{marker}{check}"));
@@ -263,7 +263,7 @@ fn render_block(node: &Value, ctx: &TxtCtx, depth: usize) -> String {
             let mut inner = String::new();
             if let Some(children) = node.get("children").and_then(Value::as_array) {
                 for c in children {
-                    let rendered = render_block(c, ctx, depth);
+                    let rendered = render_block(c, ctx);
                     inner.push_str(rendered.trim_end_matches('\n'));
                 }
             }

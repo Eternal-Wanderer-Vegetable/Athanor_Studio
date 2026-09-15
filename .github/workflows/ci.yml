@@ -1,0 +1,67 @@
+# This file is part of Athanor, the Azodoc document engine.
+# Copyright (C) 2026 The Athanor Studio Developers
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, version 3 of the License only.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+# Athanor 引擎 CI：rustfmt + clippy(-D warnings) + cargo test（双平台矩阵）。
+# Cargo workspace 位于 engine/。可选外部工具在 CI 中齐备：
+#   - pandoc：ubuntu 预装；Windows 经 choco 安装（DOCX e2e 测试）
+#   - 浏览器：ubuntu 自带 google-chrome；Windows 自带 Edge（PDF e2e 测试）
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: ci (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install Pandoc (Windows)
+        if: runner.os == 'Windows'
+        run: choco install pandoc -y --no-progress
+
+      - name: Format check
+        working-directory: engine
+        run: cargo fmt --all -- --check
+
+      - name: Clippy（警告即错误）
+        working-directory: engine
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Tests
+        working-directory: engine
+        run: cargo test --workspace

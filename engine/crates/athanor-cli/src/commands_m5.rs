@@ -158,7 +158,7 @@ pub fn cmd_publish(path: &Path, args: &PublishArgs) -> i32 {
     };
 
     // 1. 导出印刷用 HTML
-    let mut doc = load_export_doc(&mut c, None, None);
+    let doc = load_export_doc(&mut c, None, None);
     let mut seed_log = azodoc_convert::LossLog::new();
     let html = azodoc_html::export_html(&doc, &mut seed_log);
     let print_html = html.replace(

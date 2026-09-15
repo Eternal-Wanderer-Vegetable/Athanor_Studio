@@ -60,7 +60,6 @@ pub fn import(docx: &[u8], job: &mut ImportJob) -> Result<ImportOutput, bridge::
         };
         let content = ast_in::ast_to_prima(&ast, &mut ctx);
         drop(ctx);
-        let mut log = log;
 
         // 清点出的丢失部件（Pandoc 静默丢弃，必须在此补报）
         for (feature, what, msg) in inventory::loss_issues(&inv) {
@@ -96,10 +95,7 @@ pub fn export(doc: &ExportDoc, log: &mut LossLog) -> Result<Vec<u8>, bridge::Doc
 
     let result = (|| -> Result<Vec<u8>, bridge::DocxError> {
         let ast = ast_out::prima_to_ast(doc, &tmp.join("assets"), log).map_err(|e| {
-            bridge::DocxError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("AST 构建失败: {e}"),
-            ))
+            bridge::DocxError::Io(std::io::Error::other(format!("AST 构建失败: {e}")))
         })?;
         bridge::ast_to_docx(&pandoc, &ast, bridge::DEFAULT_TIMEOUT)
     })();

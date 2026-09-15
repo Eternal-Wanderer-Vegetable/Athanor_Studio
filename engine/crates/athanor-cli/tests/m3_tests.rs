@@ -15,7 +15,7 @@
 
 //! M3 端到端：修订链（importer/AI/人工作者）+ checkout 哈希一致 + 标注读写与重定位。
 
-use athanor_cli::{cmd_annotate, cmd_checkout, cmd_commit, cmd_history, AnnotateArgs};
+use athanor_cli::{cmd_annotate, cmd_checkout, cmd_commit, AnnotateArgs};
 use std::path::{Path, PathBuf};
 
 fn corpus(name: &str) -> PathBuf {

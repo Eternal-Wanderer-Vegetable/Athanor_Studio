@@ -280,7 +280,7 @@ fn list_node<'a>(
     log: &mut LossLog,
 ) -> Value {
     let (list_type, start) = match &node.data.borrow().value {
-        NodeValue::List(nl) => (nl.list_type.clone(), nl.start),
+        NodeValue::List(nl) => (nl.list_type, nl.start),
         _ => (comrak::nodes::ListType::Bullet, 1),
     };
     let ordered = matches!(list_type, comrak::nodes::ListType::Ordered);
@@ -682,7 +682,7 @@ pub fn export_markdown(doc: &ExportDoc, log: &mut LossLog) -> String {
     let mut out = String::new();
     if let Some(arr) = doc.content.get("content").and_then(Value::as_array) {
         for node in arr {
-            out.push_str(&block_md(node, &ctx, log, 0));
+            out.push_str(&block_md(node, &ctx, log));
         }
     }
     for (label, def) in &ctx.fn_defs {
@@ -721,7 +721,7 @@ fn footnote_body(def: &Value, ctx: &MdCtx, log: &mut LossLog) -> String {
     let mut parts = Vec::new();
     if let Some(children) = def.get("children").and_then(Value::as_array) {
         for c in children {
-            let rendered = block_md(c, ctx, log, 0);
+            let rendered = block_md(c, ctx, log);
             parts.push(rendered.trim_end().to_string());
         }
     }
@@ -743,14 +743,14 @@ fn indent_block(s: &str, prefix: &str, skip_first: bool) -> String {
     out
 }
 
-fn block_md(node: &Value, ctx: &MdCtx, log: &mut LossLog, depth: usize) -> String {
+fn block_md(node: &Value, ctx: &MdCtx, log: &mut LossLog) -> String {
     let t = node.get("type").and_then(Value::as_str).unwrap_or("");
     match t {
         "section" => {
             let mut s = String::new();
             if let Some(children) = node.get("children").and_then(Value::as_array) {
                 for c in children {
-                    s.push_str(&block_md(c, ctx, log, depth));
+                    s.push_str(&block_md(c, ctx, log));
                 }
             }
             s
@@ -773,7 +773,7 @@ fn block_md(node: &Value, ctx: &MdCtx, log: &mut LossLog, depth: usize) -> Strin
             let mut inner = String::new();
             if let Some(children) = node.get("children").and_then(Value::as_array) {
                 for c in children {
-                    inner.push_str(&block_md(c, ctx, log, depth));
+                    inner.push_str(&block_md(c, ctx, log));
                 }
             }
             inner
@@ -810,9 +810,8 @@ fn block_md(node: &Value, ctx: &MdCtx, log: &mut LossLog, depth: usize) -> Strin
                     let mut parts: Vec<String> = Vec::new();
                     if let Some(children) = item.get("children").and_then(Value::as_array) {
                         for (ci, c) in children.iter().enumerate() {
-                            let mut rendered = block_md(c, ctx, log, depth + 1)
-                                .trim_end_matches('\n')
-                                .to_string();
+                            let mut rendered =
+                                block_md(c, ctx, log).trim_end_matches('\n').to_string();
                             if ci == 0 && c.get("type").and_then(Value::as_str) == Some("paragraph")
                             {
                                 rendered = rendered.trim_start().to_string();
@@ -952,7 +951,7 @@ fn block_md(node: &Value, ctx: &MdCtx, log: &mut LossLog, depth: usize) -> Strin
             for key in ["children", "items"] {
                 if let Some(children) = node.get(key).and_then(Value::as_array) {
                     for c in children {
-                        s.push_str(&block_md(c, ctx, log, depth + 1));
+                        s.push_str(&block_md(c, ctx, log));
                     }
                 }
             }
@@ -1082,7 +1081,7 @@ fn cell_texts(row: &Value, ctx: &MdCtx, log: &mut LossLog) -> Vec<String> {
                     let mut s = String::new();
                     if let Some(children) = c.get("children").and_then(Value::as_array) {
                         for ch in children {
-                            s.push_str(block_md(ch, ctx, log, 0).trim());
+                            s.push_str(block_md(ch, ctx, log).trim());
                         }
                     }
                     s.replace('\n', " ")
@@ -1108,7 +1107,7 @@ fn emit_callout_md(node: &Value, ctx: &MdCtx, log: &mut LossLog) -> String {
     let mut inner = String::new();
     if let Some(children) = node.get("children").and_then(Value::as_array) {
         for c in children {
-            inner.push_str(&block_md(c, ctx, log, 0));
+            inner.push_str(&block_md(c, ctx, log));
         }
     }
     let mut s = format!("> [!{gfm}]\n");
@@ -1142,7 +1141,7 @@ fn span_md(span: &Value, ctx: &MdCtx, log: &mut LossLog) -> String {
         "hard_break" => "\\\n".to_string(),
         "code" => {
             let text = span.get("text").and_then(Value::as_str).unwrap_or("");
-            let ticks = "`".repeat(text.matches('`').count().max(0) + 1);
+            let ticks = "`".repeat(text.matches('`').count() + 1);
             let pad = if text.starts_with('`') || text.ends_with('`') {
                 " "
             } else {

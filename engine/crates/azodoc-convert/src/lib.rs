@@ -463,7 +463,7 @@ pub fn wrap_sections(idgen: &mut IdGen, nodes: Vec<Value>) -> Vec<Value> {
     let mut root: Vec<Value> = Vec::new();
     let mut stack: Vec<Open> = Vec::new();
 
-    fn close(stack: &mut Vec<Open>, root: &mut Vec<Value>, top: Open, idgen: &mut IdGen) {
+    fn close(stack: &mut [Open], root: &mut Vec<Value>, top: Open, idgen: &mut IdGen) {
         let node = json!({
             "id": idgen.uid("sec"),
             "type": "section",

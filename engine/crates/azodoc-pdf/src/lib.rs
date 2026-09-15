@@ -50,7 +50,7 @@ impl PdfError {
                  2. 或安装 Chrome\n\
                  3. 或指定路径: 设置环境变量 AZODOC_BROWSER_PATH 指向 msedge.exe/chrome.exe"
             ),
-            PdfError::PrintFailed { stderr, .. } => {
+            PdfError::PrintFailed { .. } => {
                 format!(
                     "错误：{self}\n建议：确认浏览器版本较新（需支持 --headless --print-to-pdf）。"
                 )
@@ -104,7 +104,15 @@ pub fn find_browser() -> Result<Browser, PdfError> {
 
     if let Ok(path_var) = std::env::var("PATH") {
         for dir in std::env::split_paths(&path_var) {
-            for exe in ["msedge.exe", "chrome.exe", "msedge", "chrome", "chromium"] {
+            for exe in [
+                "msedge.exe",
+                "chrome.exe",
+                "msedge",
+                "chrome",
+                "google-chrome",
+                "google-chrome-stable",
+                "chromium",
+            ] {
                 let candidate = dir.join(exe);
                 if candidate.is_file() {
                     return Ok(Browser {

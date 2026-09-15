@@ -15,9 +15,7 @@
 
 //! athanor — Azodoc 引擎命令行（薄壳；实现在 lib.rs）。
 
-use athanor_cli::{
-    cmd_import, cmd_info, cmd_new, cmd_publish, cmd_recover, cmd_transmute, cmd_upgrade,
-};
+use athanor_cli::{cmd_import, cmd_info, cmd_new, cmd_recover, cmd_transmute, cmd_upgrade};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 

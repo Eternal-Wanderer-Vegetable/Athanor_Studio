@@ -155,7 +155,7 @@ fn block_target_missing_is_detached() {
 #[test]
 fn survival_rate_on_typical_edit() {
     // 典型 AI 编辑场景：5 条标注，1 条被删文本、4 条存活（含 1 条重锚）
-    let content = json!({"schema_version": "1.0", "content": [
+    let _content = json!({"schema_version": "1.0", "content": [
         blk("A", "Azodoc 是结构化文档容器，支持安全降级。"),
         blk("B", "修订层记录 AI 作者。"),
     ]});

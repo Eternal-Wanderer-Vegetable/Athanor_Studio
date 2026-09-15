@@ -15,14 +15,6 @@
 
 //! M4 端到端（需要 Pandoc；未安装时自动跳过）。
 
-use std::path::PathBuf;
-
-fn corpus(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../corpus")
-        .join(name)
-}
-
 #[test]
 fn docx_roundtrip_e2e() {
     let Some(_pandoc) = azodoc_docx::bridge::find_pandoc().ok() else {
