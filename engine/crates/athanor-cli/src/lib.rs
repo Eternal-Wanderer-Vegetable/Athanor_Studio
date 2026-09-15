@@ -224,6 +224,7 @@ fn detect_format(path: &Path, explicit: Option<&str>) -> Option<String> {
     match ext.as_str() {
         "md" | "markdown" => Some("markdown".into()),
         "html" | "htm" => Some("html".into()),
+        "docx" => Some("docx".into()),
         _ => None,
     }
 }
@@ -233,6 +234,7 @@ fn normalize_format_or_text(f: &str) -> Option<String> {
         "md" | "markdown" => Some("markdown".into()),
         "html" | "htm" => Some("html".into()),
         "txt" | "text" => Some("text".into()),
+        "docx" => Some("docx".into()),
         _ => None,
     }
 }
@@ -241,6 +243,7 @@ fn normalize_format(f: &str) -> Option<String> {
     match f.to_ascii_lowercase().as_str() {
         "md" | "markdown" => Some("markdown".into()),
         "html" | "htm" => Some("html".into()),
+        "docx" => Some("docx".into()),
         _ => None,
     }
 }
@@ -251,6 +254,7 @@ pub fn compat_path(fmt: &str) -> Option<&'static str> {
         "markdown" => Some("compatibility/markdown/document.md"),
         "text" => Some("compatibility/text/document.txt"),
         "html" => Some("compatibility/html/index.html"),
+        "docx" => Some("compatibility/docx/document.docx"),
         _ => None,
     }
 }
@@ -272,7 +276,7 @@ pub fn cmd_import(
     }
     let Some(fmt) = detect_format(input, format) else {
         eprintln!(
-            "错误：无法识别输入格式（按扩展名 {} 或 --format）。支持: markdown, html",
+            "错误：无法识别输入格式（按扩展名 {} 或 --format）。支持: markdown, html, docx",
             input.extension().and_then(|e| e.to_str()).unwrap_or("<无>")
         );
         return 2;
@@ -287,6 +291,13 @@ pub fn cmd_import(
     let output = match fmt.as_str() {
         "markdown" => azodoc_md::import(&text, &mut job),
         "html" => azodoc_html::import(&text, &mut job),
+        "docx" => match azodoc_docx::import(&data, &mut job) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("{}", e.friendly());
+                return 1;
+            }
+        },
         _ => unreachable!(),
     };
     let source_sha = sha256_hex(&data);
@@ -681,6 +692,13 @@ pub fn cmd_transmute(
             azodoc_html::export_html(&doc, &mut log).into_bytes(),
             "html",
         ),
+        "docx" => match azodoc_docx::export(&doc, &mut log) {
+            Ok(b) => (b, "docx"),
+            Err(e) => {
+                eprintln!("{}", e.friendly());
+                return 1;
+            }
+        },
         _ => unreachable!(),
     };
 

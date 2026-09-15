@@ -6,6 +6,7 @@ members = [
     "crates/azodoc-convert",
     "crates/azodoc-md",
     "crates/azodoc-html",
+    "crates/azodoc-docx",
     "crates/athanor-cli",
 ]
 

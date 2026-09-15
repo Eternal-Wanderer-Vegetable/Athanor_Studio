@@ -104,6 +104,7 @@ version = "0.1.0"
 dependencies = [
  "azodoc-container",
  "azodoc-convert",
+ "azodoc-docx",
  "azodoc-html",
  "azodoc-md",
  "azodoc-model",
@@ -168,6 +169,18 @@ dependencies = [
  "base64 0.23.1",
  "jsonschema",
  "serde_json",
+]
+
+[[package]]
+name = "azodoc-docx"
+version = "0.1.0"
+dependencies = [
+ "azodoc-container",
+ "azodoc-convert",
+ "azodoc-model",
+ "serde_json",
+ "thiserror",
+ "zip",
 ]
 
 [[package]]

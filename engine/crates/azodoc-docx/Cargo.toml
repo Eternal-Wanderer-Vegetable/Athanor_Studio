@@ -1,0 +1,14 @@
+[package]
+name = "azodoc-docx"
+description = "Azodoc DOCX 读写器（Pandoc 子进程桥接；GPL 隔离：进程边界 + 通用 JSON 流）"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+azodoc-container = { path = "../azodoc-container" }
+azodoc-model = { path = "../azodoc-model" }
+azodoc-convert = { path = "../azodoc-convert" }
+serde_json.workspace = true
+zip.workspace = true
+thiserror.workspace = true

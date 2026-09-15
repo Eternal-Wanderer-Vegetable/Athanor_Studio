@@ -731,7 +731,8 @@ Prima ──► Pandoc AST ──► pandoc -f json -o docx
 2. ~~M0 规范包~~ —— 已交付并签署（2026-09-14）：`spec/` 四份正式规范 + 8 份 JSON Schema + 3 个黄金样例。
 3. ~~M1 容器+模型核心~~ —— 已交付（2026-09-14）：CLI new/info/verify/recover，26 项测试全绿。
 4. ~~M2 Markdown/HTML 转换~~ —— 已交付（2026-09-15）：59 项测试全绿；规范增补 v1.0.1（compat content_sha256）。
-5. **M3 已交付（2026-09-15）**：修订层（commit/history/checkout，importer/AI/人工作者落链，快照哈希一致验收）+ 语义层（annotate/annotations、text_quote 编辑后重定位：未变/重锚/迁移/detached），70 项测试全绿，对照见 `engine/README.md`。下一步进入 **M4**：DOCX（Pandoc 桥）。
+5. ~~M3 修订层+语义层~~ —— 已交付（2026-09-15）：70 项测试全绿。
+6. **M4 已交付（2026-09-15）**：azodoc-docx（Pandoc 3.11 子进程桥接，GPL 进程级隔离；便携版在 tools/，gitignore），docx 部件清点（页眉/页脚/批注丢失必报），CLI import/transmute 支持 docx，75 项测试全绿，对照见 `engine/README.md`。下一步进入 **M5**：PDF 出版管线。
 
 ---
 

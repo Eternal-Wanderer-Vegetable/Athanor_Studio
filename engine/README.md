@@ -1,6 +1,6 @@
 # Athanor Engine
 
-Azodoc 格式的 Rust 引擎（落地方案 §5 的 workspace 结构）。**当前状态：M3 已交付。**
+Azodoc 格式的 Rust 引擎（落地方案 §5 的 workspace 结构）。**当前状态：M4 已交付。**
 
 ## 布局
 
@@ -16,6 +16,8 @@ engine/
     │                             # 纯文本算法、TXT 兜底导出、相邻 text span 合并归一化
     ├── azodoc-md/                # Markdown 读写器（comrak 桥接：GFM 表格/任务/脚注/数学/提示块）
     ├── azodoc-html/              # HTML 读写器（html5ever 桥接）+ 片段净化（安全例外）
+    ├── azodoc-docx/              # DOCX 读写器（Pandoc 子进程桥接，GPL 进程级隔离；
+    │                             #   docx 部件清点：页眉/页脚/批注丢失必报）
     ├── azodoc-convert/…          # + semantics：语义标注的编辑后重定位（text_quote
     │                             #   上下文重锚 / 唯一迁移 / detached 标记）
     └── athanor-cli/              # 二进制 `athanor`：new / info / verify / recover /
@@ -23,12 +25,18 @@ engine/
                                   # checkout / annotate / annotations
 ```
 
+**DOCX 依赖 Pandoc（运行时可选）**：查找顺序 `AZODOC_PANDOC_PATH` → PATH →
+各级目录 `tools/pandoc-*/`。未安装时 DOCX 功能优雅缺席并给出安装指引，
+其余功能不受影响。便携版安装：从
+[pandoc releases](https://github.com/jgm/pandoc/releases) 下载 zip 解压到
+`tools/pandoc-3.11/`（已被 gitignore）。
+
 ## 构建与测试
 
 ```bash
 cd engine
 cargo build            # 调试构建；产物 target/debug/athanor.exe
-cargo test             # 全部测试（M1+M2+M3，共 70 项）
+cargo test             # 全部测试（M1–M4，共 75 项；DOCX e2e 需 Pandoc，缺席自动跳过）
 cargo fmt && cargo clippy   # 提交前建议
 
 # 重新生成 TXT 黄金文件（有意变更 TXT 输出时）
@@ -89,7 +97,20 @@ athanor annotations doc.azodoc [--json]
 附加：import 自动落 importer 初始修订；verify 新增修订成员规则（current ∈ 链，
 checkout 状态提示）与标注新鲜度检查（目标块存在性 + 引用文本匹配）。
 
-## 下一步（M4）
+## M4 验收对照（落地方案 §9）
 
-DOCX 转换（Pandoc 子进程桥接，GPL 隔离，可选 feature）；OOXML 无法建模部件 →
-preserved/ 保留。之后 M5 PDF 出版管线（HTML→Paged.js→Chromium，Typst 备选）。
+| 验收项 | 状态 | 证据 |
+|---|---|---|
+| DOCX 导入/导出（Pandoc 桥） | ✅ | `m4_tests::docx_roundtrip_e2e`（docx→azodoc→docx→回导全链路） |
+| 无法建模部件保留/报告 | ✅ | docx 部件清点（azodoc-docx `inventory`）：页眉/页脚/批注丢失必报（UNSUPPORTED）；RawBlock/RawInline → preserved_raw |
+| 无 Pandoc 优雅缺席 | ✅ | 友好错误含安装指引（winget/便携版/AZODOC_PANDOC_PATH）；核心功能不受影响 |
+
+映射表（§8.1）要点：样式丢弃（PARTIAL）、独立图片→Figure/figure、
+表格含合并单元格（colSpan/rowSpan 保留）、脚注 Note→footnote、
+数学 Math→inline_math/math_block、tracked changes 以 `--track-changes=all`
+读入（标记为 span class，降级提升）。
+
+## 下一步（M5）
+
+PDF 出版管线：Prima→HTML→Paged.js→headless Chromium（Typst 备选），
+publication.json 记录（source_revision/渲染器指纹/content_hash/layout_hash）。
