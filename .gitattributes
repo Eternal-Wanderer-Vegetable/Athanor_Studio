@@ -1,0 +1,4 @@
+# 字节级夹具一律不做换行/编码转换：黄金比对文件与 .azodoc 容器样例
+# 必须逐字节稳定（Windows 检出时 autocrlf 会把 LF 改写成 CRLF，破坏比对）。
+corpus/** -text
+spec/** -text

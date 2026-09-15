@@ -39,6 +39,12 @@ fn read_container(p: &Path) -> azodoc_container::Container {
 
 // ---------------------------------------------------------- TXT 黄金文件
 
+/// 黄金比对忽略换行差异（.gitattributes 已豁免夹具转换，但旧克隆或
+/// 未知 checkout 配置下夹具仍可能是 CRLF——导出器恒为 LF）。
+fn normalize_eol(s: &str) -> String {
+    s.replace("\r\n", "\n")
+}
+
 #[test]
 fn txt_golden_markdown_basic() {
     let md = std::fs::read_to_string(corpus("markdown/basic.md")).unwrap();
@@ -61,7 +67,8 @@ fn txt_golden_markdown_basic() {
     }
     let expected = std::fs::read_to_string(&golden).unwrap();
     assert_eq!(
-        actual, expected,
+        normalize_eol(&actual),
+        normalize_eol(&expected),
         "TXT 黄金文件不匹配（重新生成请设 AZODOC_WRITE_GOLDEN=1）"
     );
 }
@@ -87,7 +94,11 @@ fn txt_golden_html_basic() {
         std::fs::write(&golden, &actual).unwrap();
     }
     let expected = std::fs::read_to_string(&golden).unwrap();
-    assert_eq!(actual, expected);
+    assert_eq!(
+        normalize_eol(&actual),
+        normalize_eol(&expected),
+        "TXT 黄金文件不匹配（重新生成请设 AZODOC_WRITE_GOLDEN=1）"
+    );
 }
 
 // ---------------------------------------------------------- import → verify → transmute
