@@ -1,6 +1,6 @@
 # Athanor Engine
 
-Azodoc 格式的 Rust 引擎（落地方案 §5 的 workspace 结构）。**当前状态：M2 已交付。**
+Azodoc 格式的 Rust 引擎（落地方案 §5 的 workspace 结构）。**当前状态：M3 已交付。**
 
 ## 布局
 
@@ -16,8 +16,11 @@ engine/
     │                             # 纯文本算法、TXT 兜底导出、相邻 text span 合并归一化
     ├── azodoc-md/                # Markdown 读写器（comrak 桥接：GFM 表格/任务/脚注/数学/提示块）
     ├── azodoc-html/              # HTML 读写器（html5ever 桥接）+ 片段净化（安全例外）
+    ├── azodoc-convert/…          # + semantics：语义标注的编辑后重定位（text_quote
+    │                             #   上下文重锚 / 唯一迁移 / detached 标记）
     └── athanor-cli/              # 二进制 `athanor`：new / info / verify / recover /
-                                  # import / transmute / upgrade
+                                  # import / transmute / upgrade / history / commit /
+                                  # checkout / annotate / annotations
 ```
 
 ## 构建与测试
@@ -25,7 +28,7 @@ engine/
 ```bash
 cd engine
 cargo build            # 调试构建；产物 target/debug/athanor.exe
-cargo test             # 全部测试（M1 容器/模型 + M2 转换，共 59 项）
+cargo test             # 全部测试（M1+M2+M3，共 70 项）
 cargo fmt && cargo clippy   # 提交前建议
 
 # 重新生成 TXT 黄金文件（有意变更 TXT 输出时）
@@ -44,7 +47,15 @@ athanor transmute doc.azodoc --to html --out out.html [--no-cache] [--strict-los
 athanor transmute doc.azodoc --to md | txt
 athanor upgrade doc.azodoc                # 重建 stale 的兼容缓存
 athanor recover broken.azodoc -o out/
+athanor history doc.azodoc [--json]
+athanor commit doc.azodoc --author ai:model-x --message "AI 批量改写"
+athanor checkout doc.azodoc --revision rev_01J… [-o dir/]
+athanor annotate doc.azodoc --block blk_01J… --type Concept --value '{"label":"x"}'     --exact "引用文本" --author ai:model-x
+athanor annotations doc.azodoc [--json]
 ```
+
+导入自动落 `importer` 初始修订；checkout 后 content 与快照哈希一致、标注自动重定位、
+兼容缓存标记 stale（upgrade 重建）。
 
 `transmute` 默认把输出同时写回容器内的兼容缓存（R5 边界内）并登记 conversion-report；
 `--strict-loss` 在存在任何损失时以退出码 3 结束（loss 规范 §6）。
@@ -67,7 +78,18 @@ athanor recover broken.azodoc -o out/
 - 跨工具矩阵中的 Java `ZipFile` 项待接入 CI（spec/azodoc-container.md §9）。
 - `import` 的本地图片若文件缺失则降级为外链引用并报告（PARTIAL），不静默丢弃。
 
-## 下一步（M3）
+## M3 验收对照（落地方案 §9）
 
-修订层落地：import/save 自动落修订快照（author type 一等公民）、`athanor history` /
-`athanor checkout`、语义标注层读写与失配重定位。之后 M4 DOCX（Pandoc 桥）。
+| 验收项 | 状态 | 证据 |
+|---|---|---|
+| AI/人工修订均落链 | ✅ | `m3_tests::ai_and_human_commits_land_on_chain`（parent 链式、author type/id 落盘、非法作者类型拒绝） |
+| checkout 后 content 与快照哈希一致 | ✅ | `m3_tests::checkout_restores_snapshot_hash_and_ids`（ID 原样保留；verify 通过；缓存标记 stale） |
+| 标注「编辑后重定位」存活 | ✅ | azodoc-convert `semantics` 7 项：未变/重锚/迁移/detached 全覆盖；典型编辑场景存活率 80% ≥ 60% |
+
+附加：import 自动落 importer 初始修订；verify 新增修订成员规则（current ∈ 链，
+checkout 状态提示）与标注新鲜度检查（目标块存在性 + 引用文本匹配）。
+
+## 下一步（M4）
+
+DOCX 转换（Pandoc 子进程桥接，GPL 隔离，可选 feature）；OOXML 无法建模部件 →
+preserved/ 保留。之后 M5 PDF 出版管线（HTML→Paged.js→Chromium，Typst 备选）。

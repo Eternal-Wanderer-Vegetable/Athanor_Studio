@@ -1,5 +1,9 @@
 //! athanor 命令实现（`athanor-cli` 的库形态，供集成测试直接调用）。
 
+pub use commands_m3::{
+    cmd_annotate, cmd_annotations, cmd_checkout, cmd_commit, cmd_history, AnnotateArgs,
+};
+pub mod commands_m3;
 pub mod verify_cmd;
 
 use azodoc_container::{builder, Container, ContainerError};
@@ -20,7 +24,7 @@ pub fn sha256_hex(data: &[u8]) -> String {
     s
 }
 
-fn die(e: ContainerError) -> i32 {
+pub(crate) fn die(e: ContainerError) -> i32 {
     eprintln!("{}", e.friendly());
     1
 }
@@ -52,7 +56,7 @@ fn read_file(path: &Path) -> Result<Vec<u8>, i32> {
     })
 }
 
-fn read_container(path: &Path) -> Result<(Container, Vec<String>), i32> {
+pub(crate) fn read_container(path: &Path) -> Result<(Container, Vec<String>), i32> {
     let data = read_file(path)?;
     azodoc_container::open(data).map_err(|e| {
         eprintln!("{}", e.friendly());
@@ -169,7 +173,7 @@ pub fn cmd_info(path: &Path, as_json: bool) -> i32 {
     0
 }
 
-fn print_warnings(warnings: &[String]) {
+pub(crate) fn print_warnings(warnings: &[String]) {
     for w in warnings {
         println!("警告: {w}");
     }
@@ -436,6 +440,34 @@ pub fn cmd_import(
         Ok(b) => b,
         Err(e) => return die(e),
     };
+
+    // 初始修订：importer 落链（author type 一等公民）
+    let bytes = {
+        let (mut c, _) = match azodoc_container::open(bytes) {
+            Ok(x) => x,
+            Err(e) => return die(e),
+        };
+        let fname = input
+            .file_name()
+            .map(|f| f.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let converter = match fmt.as_str() {
+            "markdown" => azodoc_md::converter_name(),
+            _ => azodoc_html::converter_name(),
+        };
+        if let Err(e) = c.commit(&azodoc_container::revisions::CommitInfo {
+            author_type: "importer",
+            author_id: converter,
+            message: &format!("import from {fname}"),
+        }) {
+            return die(e);
+        }
+        match c.write() {
+            Ok(b) => b,
+            Err(e) => return die(e),
+        }
+    };
+
     if let Err(e) = std::fs::write(out, &bytes) {
         eprintln!("错误：写入失败: {e}");
         return 1;

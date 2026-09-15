@@ -8,6 +8,7 @@
 
 use serde_json::{json, Map, Value};
 
+pub mod semantics;
 pub mod txt;
 
 /// 损失分级（JSON 小写；spec/azodoc-loss.md §1）。

@@ -124,7 +124,16 @@ pub fn run(path: &Path) -> i32 {
     }
 
     // (9) 修订链
-    verify_revisions(&mut c, &mut errors, &mut warnings, &mut referenced);
+    verify_revisions(
+        &mut c,
+        &mut errors,
+        &mut warnings,
+        &mut infos,
+        &mut referenced,
+    );
+
+    // (9b) 语义标注新鲜度（azodoc-model.md §10）
+    verify_annotations(&mut c, &mut warnings, &mut infos, &mut referenced);
 
     // (10) 兼容缓存 + 报告登记
     let m = c.manifest_typed().clone();
@@ -294,11 +303,141 @@ fn verify_assets(
     }
 }
 
+/// (9b) 语义标注：目标存在性 + text_quote 匹配检查。
+fn verify_annotations(
+    c: &mut Container,
+    warnings: &mut Vec<String>,
+    infos: &mut Vec<String>,
+    referenced: &mut Vec<String>,
+) {
+    const LAYER: &str = "semantics/annotations.json";
+    if !c.has_entry(LAYER) {
+        return;
+    }
+    referenced.push(LAYER.to_string());
+    let bytes = match c.read_entry(LAYER) {
+        Ok(b) => b,
+        Err(e) => {
+            warnings.push(format!("语义层读取失败: {e}"));
+            return;
+        }
+    };
+    let layer: Value = match serde_json::from_slice(&bytes) {
+        Ok(v) => v,
+        Err(e) => {
+            errors_push(
+                warnings,
+                format!("semantics/annotations.json 解析失败（{e}）"),
+            );
+            return;
+        }
+    };
+    let content: Value = c
+        .read_entry("document/content.json")
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or(Value::Null);
+    let block_ids = collect_block_ids_from(&content);
+    let empty = Vec::new();
+    let anns = layer
+        .get("annotations")
+        .and_then(Value::as_array)
+        .unwrap_or(&empty);
+    for a in anns {
+        let id = a.get("id").and_then(Value::as_str).unwrap_or("?");
+        if a.get("detached") == Some(&Value::Bool(true)) {
+            infos.push(format!(
+                "标注 {id} 处于 detached 状态（原文已失配，未删除）"
+            ));
+            continue;
+        }
+        let kind = a
+            .pointer("/target/kind")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let block = a
+            .pointer("/target/block")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        if !block.is_empty() && !block_ids.iter().any(|x| x == block) {
+            warnings.push(format!(
+                "标注 {id} 的目标块不存在（{block}）——建议 athanor relocate 或重新标注"
+            ));
+            continue;
+        }
+        if kind == "text_quote" && !block.is_empty() {
+            let exact = a
+                .pointer("/target/selector/exact")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            if !exact.is_empty() {
+                let text = find_block_text(&content, block);
+                if !text.contains(exact) {
+                    warnings.push(format!(
+                        "标注 {id} 的引用文本未在块 {block} 中找到——运行 athanor relocate 重定位"
+                    ));
+                }
+            }
+        }
+    }
+}
+
+fn errors_push(warnings: &mut Vec<String>, msg: String) {
+    warnings.push(msg);
+}
+
+fn collect_block_ids_from(content: &Value) -> Vec<String> {
+    fn walk(v: &Value, out: &mut Vec<String>) {
+        if let Some(obj) = v.as_object() {
+            let t = obj.get("type").and_then(Value::as_str).unwrap_or("");
+            if let Some(id) = obj.get("id").and_then(Value::as_str) {
+                if !matches!(t, "text" | "hard_break" | "code") {
+                    out.push(id.to_string());
+                }
+            }
+            for val in obj.values() {
+                walk(val, out);
+            }
+        } else if let Some(arr) = v.as_array() {
+            for item in arr {
+                walk(item, out);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(content, &mut out);
+    out
+}
+
+fn find_block_text(content: &Value, block: &str) -> String {
+    fn walk(v: &Value, block: &str) -> Option<String> {
+        if let Some(obj) = v.as_object() {
+            if obj.get("id").and_then(Value::as_str) == Some(block) {
+                return Some(azodoc_convert::plain_text_of_block(v));
+            }
+            for val in obj.values() {
+                if let Some(found) = walk(val, block) {
+                    return Some(found);
+                }
+            }
+        } else if let Some(arr) = v.as_array() {
+            for item in arr {
+                if let Some(found) = walk(item, block) {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+    walk(content, block).unwrap_or_default()
+}
+
 /// (9) 修订链一致性。
 fn verify_revisions(
     c: &mut Container,
     errors: &mut Vec<String>,
     warnings: &mut Vec<String>,
+    infos: &mut Vec<String>,
     referenced: &mut Vec<String>,
 ) {
     let chain: Option<Value> = c
@@ -317,12 +456,30 @@ fn verify_revisions(
     };
     referenced.push("revisions/chain.json".to_string());
 
-    let head = chain.get("head").and_then(Value::as_str);
-    match (head, current.as_deref()) {
-        (Some(h), Some(cur)) if h == cur => {}
-        (Some(h), Some(cur)) => errors.push(format!(
-            "chain.head（{h}）与 manifest.current_revision（{cur}）不一致"
-        )),
+    let head = chain.get("head").and_then(Value::as_str).map(String::from);
+    // 收集修订 ID：current_revision 必须是链中一员（checkout 后允许 current ≠ head）
+    let rev_ids: Vec<String> = chain
+        .get("revisions")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|r| r.get("id").and_then(Value::as_str))
+                .map(String::from)
+                .collect()
+        })
+        .unwrap_or_default();
+    match (head.as_deref(), current.as_deref()) {
+        (Some(h), Some(cur)) => {
+            if h != cur {
+                if rev_ids.iter().any(|x| x == cur) {
+                    infos.push(format!(
+                        "文档处于修订 {cur}（非最新 head {h}）——checkout 状态"
+                    ));
+                } else {
+                    errors.push(format!("manifest.current_revision（{cur}）不在修订链中"));
+                }
+            }
+        }
         (Some(_), None) => {
             warnings.push("chain.head 存在但 manifest.current_revision 为 null".to_string())
         }

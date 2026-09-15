@@ -10,6 +10,7 @@
 pub mod builder;
 pub mod header;
 pub mod recover;
+pub mod revisions;
 
 use azodoc_model::manifest::Manifest;
 use serde_json::Value;
