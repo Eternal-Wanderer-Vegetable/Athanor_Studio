@@ -161,7 +161,7 @@ cd engine && cargo test    # 77 tests; DOCX/PDF e2e auto-skip if tools are absen
 
 ## License
 
-Copyright © 2026 Athanor Studio.
+Copyright © 2026 The Athanor Studio Developers.
 
 This project is licensed under the **GNU Affero General Public License
 v3.0 only** (**AGPL-3.0-only**) — see the [LICENSE](LICENSE) file. All source

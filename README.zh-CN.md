@@ -145,7 +145,7 @@ cd engine && cargo test    # 77 项测试；DOCX/PDF e2e 在工具缺席时自�
 
 ## 许可证
 
-版权所有 © 2026 Athanor Studio。
+版权所有 © 2026 Athanor Studio 全体开发者。
 
 本项目以 **GNU Affero 通用公共许可证 v3.0（仅此版本，AGPL-3.0-only）** 发布——
 详见 [LICENSE](LICENSE) 文件。所有源码文件均带对应版权声明。

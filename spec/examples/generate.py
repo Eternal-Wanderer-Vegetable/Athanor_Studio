@@ -1,5 +1,5 @@
 # This file is part of Athanor, the Azodoc document engine.
-# Copyright (C) 2026 Athanor Studio
+# Copyright (C) 2026 The Athanor Studio Developers
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published
