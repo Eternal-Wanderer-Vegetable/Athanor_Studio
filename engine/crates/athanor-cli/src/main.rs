@@ -1,6 +1,8 @@
 //! athanor — Azodoc 引擎命令行（薄壳；实现在 lib.rs）。
 
-use athanor_cli::{cmd_import, cmd_info, cmd_new, cmd_recover, cmd_transmute, cmd_upgrade};
+use athanor_cli::{
+    cmd_import, cmd_info, cmd_new, cmd_publish, cmd_recover, cmd_transmute, cmd_upgrade,
+};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -73,6 +75,16 @@ enum Command {
     },
     /// 重建所有过期（stale）的兼容缓存
     Upgrade { path: PathBuf },
+    /// 出版为 PDF（无头 Chromium 打印）并写入 publication 记录
+    Publish {
+        path: PathBuf,
+        /// 额外把 PDF 复制到该路径
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+        /// 浏览器路径（覆盖自动定位）
+        #[arg(long)]
+        browser: Option<String>,
+    },
     /// 显示修订链
     History {
         path: PathBuf,
@@ -162,6 +174,13 @@ fn main() {
             strict_loss,
         } => cmd_transmute(&path, &to, out.as_deref(), no_cache, strict_loss),
         Command::Upgrade { path } => cmd_upgrade(&path),
+        Command::Publish { path, out, browser } => athanor_cli::cmd_publish(
+            &path,
+            &athanor_cli::PublishArgs {
+                out: out.as_deref(),
+                browser: browser.as_deref(),
+            },
+        ),
         Command::History { path, json } => athanor_cli::cmd_history(&path, json),
         Command::Commit {
             path,

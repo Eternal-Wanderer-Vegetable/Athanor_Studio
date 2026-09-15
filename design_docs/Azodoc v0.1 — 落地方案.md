@@ -732,7 +732,8 @@ Prima ──► Pandoc AST ──► pandoc -f json -o docx
 3. ~~M1 容器+模型核心~~ —— 已交付（2026-09-14）：CLI new/info/verify/recover，26 项测试全绿。
 4. ~~M2 Markdown/HTML 转换~~ —— 已交付（2026-09-15）：59 项测试全绿；规范增补 v1.0.1（compat content_sha256）。
 5. ~~M3 修订层+语义层~~ —— 已交付（2026-09-15）：70 项测试全绿。
-6. **M4 已交付（2026-09-15）**：azodoc-docx（Pandoc 3.11 子进程桥接，GPL 进程级隔离；便携版在 tools/，gitignore），docx 部件清点（页眉/页脚/批注丢失必报），CLI import/transmute 支持 docx，75 项测试全绿，对照见 `engine/README.md`。下一步进入 **M5**：PDF 出版管线。
+6. ~~M4 DOCX（Pandoc 桥）~~ —— 已交付（2026-09-15）：75 项测试全绿。
+7. **M5 已交付（2026-09-15）**：azodoc-pdf + `athanor publish`（Prima→HTML→印刷 CSS→无头 Chromium→PDF；publication.json 冻结记录；layout_hash 确定性验收；产物按出版 ID 独立存储）。Paged.js 因 CLI 打印竞态推迟（偏差已记录）。**路线图 M0–M5 主体完成**，77 项测试全绿。可选后续：Aludel 编辑器原型、Paged.js/CDP 出版集成、DOCX 原生 OOXML RFC。
 
 ---
 

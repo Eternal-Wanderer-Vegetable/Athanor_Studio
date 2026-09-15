@@ -16,6 +16,7 @@ azodoc-convert = { path = "../azodoc-convert" }
 azodoc-md = { path = "../azodoc-md" }
 azodoc-html = { path = "../azodoc-html" }
 azodoc-docx = { path = "../azodoc-docx" }
+azodoc-pdf = { path = "../azodoc-pdf" }
 clap = { version = "4", features = ["derive"] }
 serde_json.workspace = true
 sha2.workspace = true

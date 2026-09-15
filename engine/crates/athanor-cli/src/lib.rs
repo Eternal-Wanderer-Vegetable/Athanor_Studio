@@ -4,6 +4,8 @@ pub use commands_m3::{
     cmd_annotate, cmd_annotations, cmd_checkout, cmd_commit, cmd_history, AnnotateArgs,
 };
 pub mod commands_m3;
+pub mod commands_m5;
+pub use commands_m5::{cmd_publish, PublishArgs};
 pub mod verify_cmd;
 
 use azodoc_container::{builder, Container, ContainerError};

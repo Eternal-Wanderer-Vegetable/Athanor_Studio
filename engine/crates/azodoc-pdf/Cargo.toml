@@ -1,0 +1,11 @@
+[package]
+name = "azodoc-pdf"
+description = "Azodoc PDF 出版：无头 Chromium/Edge 打印管线与浏览器指纹"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+azodoc-convert = { path = "../azodoc-convert" }
+sha2.workspace = true
+thiserror.workspace = true

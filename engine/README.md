@@ -1,6 +1,6 @@
 # Athanor Engine
 
-Azodoc 格式的 Rust 引擎（落地方案 §5 的 workspace 结构）。**当前状态：M4 已交付。**
+Azodoc 格式的 Rust 引擎（落地方案 §5 的 workspace 结构）。**当前状态：M5 已交付。**
 
 ## 布局
 
@@ -20,10 +20,15 @@ engine/
     │                             #   docx 部件清点：页眉/页脚/批注丢失必报）
     ├── azodoc-convert/…          # + semantics：语义标注的编辑后重定位（text_quote
     │                             #   上下文重锚 / 唯一迁移 / detached 标记）
+    ├── azodoc-pdf/               # PDF 出版：无头 Chromium/Edge 打印 + 浏览器指纹 +
+    │                             #   页数统计（tools/pagedjs/ 存在时可注入 Paged.js）
     └── athanor-cli/              # 二进制 `athanor`：new / info / verify / recover /
                                   # import / transmute / upgrade / history / commit /
-                                  # checkout / annotate / annotations
+                                  # checkout / annotate / annotations / publish
 ```
+
+**PDF 出版依赖无头浏览器（运行时可选）**：查找顺序 `AZODOC_BROWSER_PATH` →
+PATH → Windows 标准安装位置（Windows 自带 Edge 即可）→ `tools/`。
 
 **DOCX 依赖 Pandoc（运行时可选）**：查找顺序 `AZODOC_PANDOC_PATH` → PATH →
 各级目录 `tools/pandoc-*/`。未安装时 DOCX 功能优雅缺席并给出安装指引，
@@ -36,7 +41,7 @@ engine/
 ```bash
 cd engine
 cargo build            # 调试构建；产物 target/debug/athanor.exe
-cargo test             # 全部测试（M1–M4，共 75 项；DOCX e2e 需 Pandoc，缺席自动跳过）
+cargo test             # 全部测试（M1–M5，共 77 项；DOCX e2e 需 Pandoc、publish e2e 需浏览器，缺席自动跳过）
 cargo fmt && cargo clippy   # 提交前建议
 
 # 重新生成 TXT 黄金文件（有意变更 TXT 输出时）
@@ -60,6 +65,7 @@ athanor commit doc.azodoc --author ai:model-x --message "AI 批量改写"
 athanor checkout doc.azodoc --revision rev_01J… [-o dir/]
 athanor annotate doc.azodoc --block blk_01J… --type Concept --value '{"label":"x"}'     --exact "引用文本" --author ai:model-x
 athanor annotations doc.azodoc [--json]
+athanor publish doc.azodoc --out out.pdf   # 出版 PDF + 写入 publication 记录
 ```
 
 导入自动落 `importer` 初始修订；checkout 后 content 与快照哈希一致、标注自动重定位、
@@ -110,7 +116,22 @@ checkout 状态提示）与标注新鲜度检查（目标块存在性 + 引用�
 数学 Math→inline_math/math_block、tracked changes 以 `--track-changes=all`
 读入（标记为 span class，降级提升）。
 
-## 下一步（M5）
+## M5 验收对照（落地方案 §9）
 
-PDF 出版管线：Prima→HTML→Paged.js→headless Chromium（Typst 备选），
-publication.json 记录（source_revision/渲染器指纹/content_hash/layout_hash）。
+| 验收项 | 状态 | 证据 |
+|---|---|---|
+| PDF 出版管线 | ✅ | `m5_tests::publish_e2e_and_deterministic_layout_hash`（Prima→HTML→印刷 CSS→无头 Chromium→PDF） |
+| publication.json 记录 | ✅ | source_revision / 渲染器指纹 / content_hash / layout_hash / artifact sha256 / 页数，追加不覆盖 |
+| 确定性（layout_hash） | ✅ | 同输入同渲染器两次出版 layout_hash 一致（PDF 字节含时间戳不入哈希） |
+| 产物完整性 | ✅ | verify 校验 artifact sha256；篡改一字节即检出（`publish_tampered_artifact_is_detected`） |
+| 无浏览器优雅缺席 | ✅ | 友好错误含指引（Windows 自带 Edge 即可用；AZODOC_BROWSER_PATH） |
+
+**与方案的偏差（诚实记录）**：Paged.js 注入在 CLI `--print-to-pdf` 下存在
+「虚拟时间预算 vs 渲染完成」竞态（实测产出空白页），M5 基线改用 Chromium 原生
+打印（原生分页/A4/断页控制可用；页码边盒与运行头需 Paged.js，推迟到与 CDP
+驱动集成的后续里程碑）。产物按出版 ID 独立存储（冻结历史互不覆盖）。
+
+## 下一步
+
+路线图主体（M0–M5）已完成。可选后续：Aludel 编辑器原型（ProseMirror）、
+Paged.js/CDP 出版集成、DOCX 原生 OOXML 读取 RFC、语义层 AI 管线示例。

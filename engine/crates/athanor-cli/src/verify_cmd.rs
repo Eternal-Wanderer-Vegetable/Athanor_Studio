@@ -135,6 +135,9 @@ pub fn run(path: &Path) -> i32 {
     // (9b) 语义标注新鲜度（azodoc-model.md §10）
     verify_annotations(&mut c, &mut warnings, &mut infos, &mut referenced);
 
+    // (9c) 出版记录完整性（artifact 存在 + sha 一致）
+    verify_publications(&mut c, &mut errors, &mut referenced);
+
     // (10) 兼容缓存 + 报告登记
     let m = c.manifest_typed().clone();
     let content_sha = c
@@ -430,6 +433,57 @@ fn find_block_text(content: &Value, block: &str) -> String {
         None
     }
     walk(content, block).unwrap_or_default()
+}
+
+/// (9c) 出版记录：publication.json 的 artifact 完整性。
+/// 出版是冻结历史（不随内容演进过期），只校验产物完整性与 ID 合法性。
+fn verify_publications(c: &mut Container, errors: &mut Vec<String>, referenced: &mut Vec<String>) {
+    const LAYER: &str = "publication/publication.json";
+    if !c.has_entry(LAYER) {
+        return;
+    }
+    referenced.push(LAYER.to_string());
+    let bytes = match c.read_entry(LAYER) {
+        Ok(b) => b,
+        Err(e) => {
+            errors.push(format!("publication 层读取失败: {e}"));
+            return;
+        }
+    };
+    let layer: Value = match serde_json::from_slice(&bytes) {
+        Ok(v) => v,
+        Err(e) => {
+            errors.push(format!("publication.json 解析失败（{e}）"));
+            return;
+        }
+    };
+    let empty = Vec::new();
+    let pubs = layer
+        .get("publications")
+        .and_then(Value::as_array)
+        .unwrap_or(&empty);
+    for p in pubs {
+        let id = p.get("id").and_then(Value::as_str).unwrap_or("?");
+        if !azodoc_model::id::is_valid_id(id) {
+            errors.push(format!("publication id 非法（{id}）"));
+        }
+        if let (Some(path), Some(sha)) = (
+            p.pointer("/artifact/path").and_then(Value::as_str),
+            p.pointer("/artifact/sha256").and_then(Value::as_str),
+        ) {
+            referenced.push(path.to_string());
+            match c.read_entry(path) {
+                Err(_) => errors.push(format!("publication {id}: PDF 产物缺失（{path}）")),
+                Ok(bytes) => {
+                    if crate::sha256_hex(&bytes) != sha {
+                        errors.push(format!("publication {id}: PDF sha256 不匹配（{path}）"));
+                    }
+                }
+            }
+        } else {
+            errors.push(format!("publication {id}: 缺少 artifact path/sha256"));
+        }
+    }
 }
 
 /// (9) 修订链一致性。

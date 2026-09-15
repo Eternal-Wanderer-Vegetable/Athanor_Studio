@@ -108,6 +108,7 @@ dependencies = [
  "azodoc-html",
  "azodoc-md",
  "azodoc-model",
+ "azodoc-pdf",
  "clap",
  "serde_json",
  "sha2 0.10.9",
@@ -218,6 +219,15 @@ dependencies = [
  "thiserror",
  "ulid",
  "zip",
+]
+
+[[package]]
+name = "azodoc-pdf"
+version = "0.1.0"
+dependencies = [
+ "azodoc-convert",
+ "sha2 0.10.9",
+ "thiserror",
 ]
 
 [[package]]
