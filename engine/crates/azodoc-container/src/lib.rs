@@ -408,6 +408,22 @@ impl Container {
             }
         }
 
+        // 新增条目（原档案中不存在，如导出报告文件）
+        let existing: std::collections::HashSet<String> =
+            self.archive.file_names().map(str::to_string).collect();
+        for (name, bytes) in &self.modified {
+            if existing.contains(name) {
+                continue;
+            }
+            let opts = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Deflated)
+                .unix_permissions(0o644);
+            writer
+                .start_file(name, opts)
+                .map_err(|e| ContainerError::Zip(e.to_string()))?;
+            writer.write_all(bytes).map_err(ContainerError::Io)?;
+        }
+
         let zip_bytes = writer
             .finish()
             .map_err(|e| ContainerError::Zip(e.to_string()))?

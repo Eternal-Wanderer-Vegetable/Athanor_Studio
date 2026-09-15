@@ -1,0 +1,13 @@
+[package]
+name = "azodoc-md"
+description = "Azodoc Markdown 读写器（comrak 桥接）"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+azodoc-model = { path = "../azodoc-model" }
+azodoc-convert = { path = "../azodoc-convert" }
+serde_json.workspace = true
+comrak.workspace = true
+base64.workspace = true

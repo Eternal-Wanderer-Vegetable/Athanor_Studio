@@ -12,6 +12,9 @@ path = "src/main.rs"
 [dependencies]
 azodoc-model = { path = "../azodoc-model" }
 azodoc-container = { path = "../azodoc-container" }
+azodoc-convert = { path = "../azodoc-convert" }
+azodoc-md = { path = "../azodoc-md" }
+azodoc-html = { path = "../azodoc-html" }
 clap = { version = "4", features = ["derive"] }
 serde_json.workspace = true
 sha2.workspace = true

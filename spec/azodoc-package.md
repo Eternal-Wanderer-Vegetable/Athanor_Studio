@@ -178,6 +178,11 @@ reports/
   - 重建只允许写 `compatibility/` 与 `reports/`，以及 manifest 的 `compatibility`/`reports` 成员——这是 R5 的边界；
   - 任何读取路径 MUST NOT 把 `compatibility/` 当作内容来源（内容真源唯一：`document/content.json`）。
 
+> **v1.0.1 增补（M2）**：兼容条目 MAY 额外携带 `content_sha256`（生成时内容层的 SHA-256，
+> 经 R2 通道存储于条目的未知成员中）。新鲜度判定在修订绑定之外叠加该哈希比对：
+> 哈希存在且与当前内容层不一致 → stale。这使「无修订文档的缓存过期」可被检测，
+> 是 `athanor upgrade` 在修订层（M3）就绪前的岔度检测基础。
+
 ---
 
 ## 7. 写权限矩阵（谁可以写什么）

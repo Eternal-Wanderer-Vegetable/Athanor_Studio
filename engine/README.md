@@ -1,6 +1,6 @@
 # Athanor Engine
 
-Azodoc 格式的 Rust 引擎（落地方案 §5 的 workspace 结构）。**当前状态：M1 已交付。**
+Azodoc 格式的 Rust 引擎（落地方案 §5 的 workspace 结构）。**当前状态：M2 已交付。**
 
 ## 布局
 
@@ -12,7 +12,12 @@ engine/
     │                             # + schemars Schema 生成（schema_gen）
     ├── azodoc-container/         # 32 字节 Header、ZIP、探测算法、保真重写（R1/R2）、
     │                             # 资源限制、两级恢复（recover）、最小文档构建（builder）
-    └── athanor-cli/              # 二进制 `athanor`：new / info / verify / recover
+    ├── azodoc-convert/           # 损失日志（R6）、conversion-report 生成、导入产物装配、
+    │                             # 纯文本算法、TXT 兜底导出、相邻 text span 合并归一化
+    ├── azodoc-md/                # Markdown 读写器（comrak 桥接：GFM 表格/任务/脚注/数学/提示块）
+    ├── azodoc-html/              # HTML 读写器（html5ever 桥接）+ 片段净化（安全例外）
+    └── athanor-cli/              # 二进制 `athanor`：new / info / verify / recover /
+                                  # import / transmute / upgrade
 ```
 
 ## 构建与测试
@@ -20,42 +25,49 @@ engine/
 ```bash
 cd engine
 cargo build            # 调试构建；产物 target/debug/athanor.exe
-cargo test             # 全部 26 个测试（含黄金样例集成测试）
+cargo test             # 全部测试（M1 容器/模型 + M2 转换，共 59 项）
 cargo fmt && cargo clippy   # 提交前建议
+
+# 重新生成 TXT 黄金文件（有意变更 TXT 输出时）
+AZODOC_WRITE_GOLDEN=1 cargo test -p athanor-cli txt_golden
 ```
 
 ## CLI 用法
 
 ```bash
 athanor new doc.azodoc --title "新文档" --lang zh-CN
+athanor import input.md -o doc.azodoc [--report r.json] [--strict-loss]
+athanor import input.html -o doc.azodoc
 athanor info doc.azodoc [--json]
-athanor verify doc.azodoc          # 退出码 0=有效，1=无效
+athanor verify doc.azodoc                 # 退出码 0=有效，1=无效
+athanor transmute doc.azodoc --to html --out out.html [--no-cache] [--strict-loss]
+athanor transmute doc.azodoc --to md | txt
+athanor upgrade doc.azodoc                # 重建 stale 的兼容缓存
 athanor recover broken.azodoc -o out/
 ```
 
-所有打开/解析错误均按规范输出四段式友好信息（发生了什么 / 文件是否损坏 / 建议 / 恢复命令）。
+`transmute` 默认把输出同时写回容器内的兼容缓存（R5 边界内）并登记 conversion-report；
+`--strict-loss` 在存在任何损失时以退出码 3 结束（loss 规范 §6）。
 
-## M1 验收对照（落地方案 §9）
+## M2 验收对照（落地方案 §9）
 
 | 验收项 | 状态 | 证据 |
 |---|---|---|
-| ① 任意 v1 文件读→写字节级稳定 | ✅ | `noop_roundtrip_is_byte_identical`（三个黄金样例；未修改容器原样返回，不重写） |
-| ② forward-compat 夹具未知条目/字段往返保真（R1/R2） | ✅ | `modified_rewrite_preserves_unknown_entries_and_fields`（编辑 content 后重写：未知条目字节不变、manifest 未知字段/未知层保留、sha256 自动同步） |
-| ③ 损坏文件全走友好报错（R4） | ✅ | 坏魔数/坏 CRC/高主版本/截断/非 Azodoc 各有专项测试；版本拒绝输出恢复指引 |
-| ④ schemars Schema 与 spec/ 双向比对 | ✅ | `golden_layers_accepted_by_both_schemas`：黄金样例层文件在生成 Schema 与 spec Schema 下均被接受 |
+| ① 语料库 md/html 往返恒等 | ✅ | azodoc-md / azodoc-html 的 `roundtrip` 测试（模型层恒等：资产 ID 序号化后内容树一致） |
+| ② 映射表行损失级别断言 | ✅ | azodoc-md `mapping`（9 项）+ azodoc-html `mapping`（10 项，含安全例外条款） |
+| ③ `--to txt` 黄金文件 | ✅ | `corpus/golden/*.txt` + `m2_tests::txt_golden_*` |
+| ④ stale 标记与 upgrade 生效 | ✅ | `m2_tests::upgrade_rebuilds_stale_caches`（content_sha256 岔度检测，spec v1.0.1 增补） |
 
-附加：ZIP 炸弹（压缩比）拒绝、加密条目拒绝、recover 模式 A/B（中央目录 + Local Header 扫描）、
-`athanor verify` 实现 package 规范 §9 的步骤 1–11。
+附带修复（M2 过程中发现）：容器重写时新增条目（如导出报告）未写入 ZIP——已修复并有回归覆盖。
 
 ## 与落地方案的偏差（有意为之）
 
-- `miette` 暂未引入：四段式输出自绘即可，M2 转换诊断再评估。
-- `azodoc-convert` crate 推迟到 M2（转换器注册表 + 损失报告引擎）。
-- 验收 ④ 的形式是「双向接受性测试」而非字面 diff：schemars 生成物是规范的机器投影，
-  手写 spec Schema 始终是 normative。
+- `miette` 暂未引入：四段式输出自绘即可，后续编辑器诊断再评估。
+- 验收 ④ 的 Schema 比对形式是「双向接受性测试」而非字面 diff（见 azodoc-model crate 测试）。
 - 跨工具矩阵中的 Java `ZipFile` 项待接入 CI（spec/azodoc-container.md §9）。
+- `import` 的本地图片若文件缺失则降级为外链引用并报告（PARTIAL），不静默丢弃。
 
-## 下一步（M2）
+## 下一步（M3）
 
-azodoc-md / azodoc-html 读写器、conversion-report 引擎、兼容缓存刷新与 stale 标记、
-`athanor import` / `athanor transmute`（含 `--to txt` 的最后一道恢复通道刷新）。
+修订层落地：import/save 自动落修订快照（author type 一等公民）、`athanor history` /
+`athanor checkout`、语义标注层读写与失配重定位。之后 M4 DOCX（Pandoc 桥）。

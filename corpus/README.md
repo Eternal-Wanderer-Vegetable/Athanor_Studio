@@ -1,0 +1,19 @@
+# 测试语料库
+
+落地方案 §10「测试与验收体系」的语料资产。黄金样例 `.azodoc` 在 `spec/examples/`（M0 夹具，冻结勿动）。
+
+## 结构
+
+| 目录/文件 | 用途 |
+|---|---|
+| `markdown/basic.md` | MD 恒等语料：标题/段落/强调/列表/任务/表格/脚注/数学/front-matter |
+| `markdown/lossy.md` | MD 有损语料：内联 HTML、HTML 注释、HTML 块（preserved_raw 断言用） |
+| `html/basic.html` | HTML 恒等语料：标题/列表/表格/引用/代码/图/硬换行 |
+| `html/lossy.html` | HTML 有损语料：script、onclick、javascript: URL、自定义元素、样式类、iframe、注释 |
+| `golden/markdown-basic.txt` | TXT 兜底导出黄金文件（`AZODOC_WRITE_GOLDEN=1 cargo test` 重新生成） |
+| `golden/html-basic.txt` | 同上（HTML 来源） |
+
+## 恒等判定
+
+往返恒等 = **模型层恒等**（内容树在资产 ID 序号化后一致），不是字节恒等。
+有损特性不参与恒等测试，由各转换器的 `mapping` 测试按损失分级断言（落地方案 §7 映射表）。

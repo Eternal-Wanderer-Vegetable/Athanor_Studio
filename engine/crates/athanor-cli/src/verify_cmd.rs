@@ -128,12 +128,23 @@ pub fn run(path: &Path) -> i32 {
 
     // (10) 兼容缓存 + 报告登记
     let m = c.manifest_typed().clone();
+    let content_sha = c
+        .read_entry("document/content.json")
+        .ok()
+        .map(|b| crate::sha256_hex(&b));
     for e in &m.compatibility {
         referenced.push(e.path.clone());
         if !c.has_entry(&e.path) {
             errors.push(format!("兼容缓存条目缺失（{}）", e.path));
         }
-        let fresh = m.compat_is_fresh(e);
+        // 新鲜度：修订绑定 + 可选的 content_sha256 岔度检测（spec v1.0.1 增补）
+        let mut fresh = m.compat_is_fresh(e);
+        if let (Some(sha), Some(cur)) = (
+            e.extra.0.get("content_sha256").and_then(Value::as_str),
+            &content_sha,
+        ) {
+            fresh = fresh && sha == cur;
+        }
         match (e.status.as_deref(), fresh) {
             (Some("fresh"), false) => warnings.push(format!(
                 "compatibility[{}] 标记 fresh 但实际 stale（绑定 {:?} vs 当前 {:?}）",

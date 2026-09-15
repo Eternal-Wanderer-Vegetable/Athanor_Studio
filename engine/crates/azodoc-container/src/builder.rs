@@ -116,7 +116,7 @@ pub(crate) fn sha256_hex(data: &[u8]) -> String {
 }
 
 /// RFC 3339 UTC 当前时间（无外部时间依赖； civil 算法为 Howard Hinnant 的 days_from_civil 逆变换）。
-pub(crate) fn rfc3339_now() -> String {
+pub fn rfc3339_now() -> String {
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())

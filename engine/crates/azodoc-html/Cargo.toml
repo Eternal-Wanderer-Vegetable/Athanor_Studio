@@ -1,0 +1,15 @@
+[package]
+name = "azodoc-html"
+description = "Azodoc HTML 读写器（html5ever 桥接）与片段净化"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+azodoc-model = { path = "../azodoc-model" }
+azodoc-convert = { path = "../azodoc-convert" }
+serde_json.workspace = true
+html5ever.workspace = true
+markup5ever_rcdom.workspace = true
+base64.workspace = true
+tendril.workspace = true

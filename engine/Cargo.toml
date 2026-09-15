@@ -1,6 +1,13 @@
 [workspace]
 resolver = "2"
-members = ["crates/azodoc-model", "crates/azodoc-container", "crates/athanor-cli"]
+members = [
+    "crates/azodoc-model",
+    "crates/azodoc-container",
+    "crates/azodoc-convert",
+    "crates/azodoc-md",
+    "crates/azodoc-html",
+    "crates/athanor-cli",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -19,6 +26,11 @@ crc32fast = "1.5"
 zip = "8.6"
 flate2 = "1.1"
 sha2 = "0.10"
+comrak = "0.55"
+html5ever = "0.39"
+markup5ever_rcdom = "0.39"
+base64 = "0.23"
+tendril = "0.5"
 
 [profile.release]
 lto = "thin"
