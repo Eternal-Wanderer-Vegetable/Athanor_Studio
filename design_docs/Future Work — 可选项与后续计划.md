@@ -147,15 +147,14 @@
   仅清理"任何历史都不可达"的资产；默认 dry-run，`--apply` 才真删。
 - **规模**：S–M。**前置**：无。
 
-### C7. 许可证统一
+### C7. ~~许可证统一~~ —— 已决议（2026-09-15）
 
-- **背景**：仓库根 LICENSE 为 **AGPL-3.0**（初始提交带入），而 engine crates
-  声明 `MIT OR Apache-2.0`——当前处于不一致状态。README 已如实标注。
-- **待决问题**：a) 引擎走哪个许可（MIT/Apache 利于生态采纳；AGPL 利于
-  Copyleft 护栏——注意 Pandoc 桥接已被进程隔离，不受 GPL 传染，两种选择都可行）；
-  b) 根 LICENSE 与 crate 声明对齐；c) 是否需要 NOTICE / 第三方清单
-  （zip/html5ever/comrak 等传递依赖）。
-- **规模**：S（决策 + 文件调整）。**前置**：项目所有者拍板。
+- **决议**：全项目统一为 **AGPL-3.0-only**（与根 LICENSE 一致）。已完成：
+  workspace license 字段、全部 44 个 `.rs` 文件与 `generate.py` 的版权头、
+  README（中英）许可章节。
+- **遗留（可选）**：是否补 NOTICE / 第三方依赖清单
+  （zip/html5ever/comrak/pandoc 等传递依赖的版权声明汇总）。
+- **规模**：S。**前置**：无。
 
 ### C8. `athanor info` 增强：损失档案与出版历史汇总
 

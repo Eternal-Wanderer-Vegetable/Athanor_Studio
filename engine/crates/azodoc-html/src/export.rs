@@ -1,3 +1,18 @@
+// This file is part of Athanor, the Azodoc document engine.
+// Copyright (C) 2026 Athanor Studio
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, version 3 of the License only.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 //! HTML 导出：自包含单文件（资产 data URI 化；含血统 meta）。
 //! 脚注引用统一编号并集中到文档末尾；preserved 载荷内联前必须消毒。
 

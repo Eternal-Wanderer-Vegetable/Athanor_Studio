@@ -1,3 +1,18 @@
+// This file is part of Athanor, the Azodoc document engine.
+// Copyright (C) 2026 Athanor Studio
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, version 3 of the License only.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 //! M2 验收 ①：语料库 `md → azodoc → md → azodoc` 的**模型层恒等**测试。
 //!
 //! 恒等的判定标准：两次导入的内容树在「资产 ID 序号化」之后完全一致。

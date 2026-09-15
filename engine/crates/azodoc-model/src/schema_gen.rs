@@ -1,3 +1,18 @@
+// This file is part of Athanor, the Azodoc document engine.
+// Copyright (C) 2026 Athanor Studio
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, version 3 of the License only.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 //! schemars JSON Schema 生成（落地方案 M1 验收 ④）。
 //!
 //! 生成 Schema 是 spec/json-schema 手写规范的机器投影；CI 测试断言：

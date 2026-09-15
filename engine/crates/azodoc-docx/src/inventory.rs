@@ -1,3 +1,18 @@
+// This file is part of Athanor, the Azodoc document engine.
+// Copyright (C) 2026 Athanor Studio
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, version 3 of the License only.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 //! DOCX 清点：直接把 docx 当 ZIP 打开，盘点 Pandoc AST 里看不到的部件
 //! （页眉/页脚/批注/核心属性标题）。丢失部件必须报告（R6），据此发损失事件。
 

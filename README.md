@@ -1,7 +1,8 @@
 # Athanor Studio
 
 **One file in, every format out — and back.**
-**万物入炉，一炼成书。**
+
+> 中文文档：[README.zh-CN.md](README.zh-CN.md)
 
 Athanor Studio is the home of **Azodoc** (`.azodoc`) — a structured, single-file
 document container — and **Athanor**, the Rust engine that creates, validates,
@@ -47,6 +48,8 @@ universal but entangled with presentation. Azodoc unifies them:
 
 Roadmap **M0–M5 complete** (spec → container core → converters → revisions &
 semantics → DOCX → PDF publishing). **77 tests passing.**
+Future directions are archived in the
+[future-work document](design_docs/Future%20Work%20—%20可选项与后续计划.md).
 
 | Format | Import | Export |
 |---|---|---|
@@ -151,48 +154,25 @@ cd engine && cargo test    # 77 tests; DOCX/PDF e2e auto-skip if tools are absen
 
 ## Documentation
 
-- **[设计草案 (Chinese)](design_docs/SDOC%20Document%20Model%20v0.1%20—%20草案.md)** — the original concept draft
-- **[落地方案 (Chinese)](design_docs/Azodoc%20v0.1%20—%20落地方案.md)** — the implementation plan this repo was built from, with milestone acceptance records
-- **[Future work / 可选项](design_docs/Future%20Work%20—%20可选项与后续计划.md)** — archived roadmap options (editor prototype, Paged.js publishing, native OOXML, AI pipeline, licensing unification, …)
+- **[Design draft (Chinese)](design_docs/SDOC%20Document%20Model%20v0.1%20—%20草案.md)** — the original concept draft
+- **[Implementation plan (Chinese)](design_docs/Azodoc%20v0.1%20—%20落地方案.md)** — the plan this repo was built from, with milestone acceptance records
+- **[Future work / 可选项](design_docs/Future%20Work%20—%20可选项与后续计划.md)** — archived roadmap options (editor prototype, Paged.js publishing, native OOXML, AI pipeline, …)
 - **[spec/](spec/)** — normative container/package/model/loss specifications
 
 ## License
 
-The repository root currently carries **AGPL-3.0** (from project inception),
-while engine crates are declared `MIT OR Apache-2.0`. Unifying this is an open
-decision tracked in the [future-work document](design_docs/Future%20Work%20—%20可选项与后续计划.md).
-Note: the Pandoc DOCX bridge is license-clean by construction — Pandoc is
-invoked as a separate, user-installed process over standard streams; its GPL
-code is never linked or distributed with the engine.
+Copyright © 2026 Athanor Studio.
 
----
+This project is licensed under the **GNU Affero General Public License
+v3.0 only** (**AGPL-3.0-only**) — see the [LICENSE](LICENSE) file. All source
+files carry the corresponding copyright notice.
 
-## 中文简介
+This means, in brief: you may use, study, modify, and redistribute Azodoc and
+Athanor freely; if you distribute a modified version (or run a modified version
+as a network service), you must release its complete corresponding source under
+the same AGPL-3.0 license.
 
-Athanor Studio 是 **Azodoc**（`.azodoc`）结构化文档容器与 **Athanor** Rust 引擎的所在地。
-
-- **单文件结构化容器**：32 字节魔数头 + 标准 ZIP，任何 ZIP 工具可直接打开；
-  正文可通过 `compatibility/text/document.txt` 永远找回。
-- **内容是唯一真源**：Markdown / HTML / DOCX / TXT / PDF 都是可再生的派生表示。
-- **不静默丢失**：每次转换产出五级损失报告（none/partial/degraded/unsupported/preserved_raw），
-  无法建模的原始内容进 `preserved/`。
-- **修订与 AI 作者一等公民**：导入、人工编辑、AI 批量改写都落快照链；
-  语义标注与内容分离，编辑后自动重定位（重锚/迁移/detached，绝不删除）。
-- **出版即冻结历史**：每次 `athanor publish` 产出独立 PDF 与完整出版档案。
-
-快速上手：
-
-```bash
-cd engine && cargo build --release
-athanor import input.md -o doc.azodoc     # 导入
-athanor transmute doc.azodoc --to html    # 导出
-athanor publish doc.azodoc --out out.pdf  # 出版
-athanor verify doc.azodoc                 # 校验
-```
-
-详细文档见上方 Documentation 一节；未来计划与可选项存档于
-[design_docs/Future Work — 可选项与后续计划](design_docs/Future%20Work%20—%20可选项与后续计划.md)。
-
-许可证：仓库根目前为 **AGPL-3.0**，引擎 crate 声明为 MIT OR Apache-2.0，
-统一方案待定（见未来计划文档）。Pandoc 桥接以独立进程调用、不经标准流以外
-方式交互，核心许可不受 GPL 传染。
+The DOCX bridge is license-clean by construction: Pandoc is invoked as a
+separate, user-installed process over standard streams. Its GPL code is never
+linked into — or distributed with — the engine, which is why Athanor can remain
+AGPL-3.0 while benefiting from Pandoc.

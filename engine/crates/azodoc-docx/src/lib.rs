@@ -1,7 +1,22 @@
+// This file is part of Athanor, the Azodoc document engine.
+// Copyright (C) 2026 Athanor Studio
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, version 3 of the License only.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 //! azodoc-docx — DOCX 读写器（Pandoc 子进程桥接）。
 //!
 //! 许可隔离：以独立子进程调用 GPL 工具 Pandoc，经标准流交换通用 JSON，
-//! 不链接、不分发其代码，核心许可（MIT OR Apache-2.0）不受传染。
+//! 不链接、不分发其代码，核心许可（AGPL-3.0-only）不受传染。
 //! Pandoc 为运行时可选依赖：未安装时返回带安装指引的友好错误。
 
 pub mod ast_in;
