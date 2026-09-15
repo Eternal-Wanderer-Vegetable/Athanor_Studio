@@ -47,8 +47,12 @@ universal but entangled with presentation. Azodoc unifies them:
 ## Current status
 
 Roadmap **M0–M5 complete** (spec → container core → converters → revisions &
-semantics → DOCX → PDF publishing). **77 tests passing.**
-Future directions are archived in the
+semantics → DOCX → PDF publishing), plus two follow-ups from the future-work
+archive: **A2** — an AI pipeline example (LLM → annotations & revisions with
+auditable `ai:*` authorship) and **B1** — Paged.js/CDP publishing (page-number
+footers, running headers, race-free pagination). **88 tests passing.** CI runs
+rustfmt + clippy + the full test matrix on Ubuntu & Windows via GitHub Actions.
+Remaining directions are archived in the
 [future-work document](design_docs/Future%20Work%20—%20可选项与后续计划.md).
 
 | Format | Import | Export |
@@ -57,7 +61,7 @@ Future directions are archived in the
 | HTML (self-contained single-file output, sanitized re-import) | ✅ | ✅ |
 | DOCX (via Pandoc subprocess bridge — GPL isolated at the process boundary) | ✅ | ✅ |
 | Plain text (last-resort recovery channel, always cached in-container) | ✅ | ✅ |
-| PDF publication (headless Chromium/Edge; publication records) | — | ✅ |
+| PDF publication (headless Chromium/Edge + Paged.js pagination: page numbers & running headers; publication records) | — | ✅ |
 
 DOCX import inventories parts that Pandoc silently drops (headers, footers,
 comments) and reports them as `unsupported` — nothing disappears quietly.
@@ -101,8 +105,13 @@ athanor checkout doc.azodoc --revision rev_01J… # content == snapshot, IDs pre
 athanor annotate doc.azodoc --block blk_01J… --type Concept \
     --value '{"label":"demo"}' --exact "quoted text" --author ai:model-x
 
-# Publish (headless Edge/Chrome → PDF + frozen publication record)
+# Publish (headless Edge/Chrome + Paged.js pagination → PDF + frozen record)
 athanor publish doc.azodoc --out out.pdf
+athanor publish doc.azodoc --no-paged            # plain Chromium print, no margin boxes
+
+# AI pipeline demo (offline FakeProvider by default; LLM writes ai:*-authored
+# annotations with confidence + a rewrite revision you can review & roll back)
+cargo run -p athanor-cli --example ai_pipeline -- doc.azodoc
 
 # Rescue a damaged file (source is never modified)
 athanor recover broken.azodoc -o recovered/
@@ -136,27 +145,27 @@ newer file loses nothing.
 
 | Path | What |
 |---|---|
-| [`engine/`](engine/) | Athanor engine — Rust workspace (7 crates, 77 tests) |
+| [`engine/`](engine/) | Athanor engine — Rust workspace (8 crates, 88 tests) |
 | [`spec/`](spec/) | Azodoc v1.0 specifications (container, package, model, loss) + JSON Schemas + golden fixtures |
 | [`corpus/`](corpus/) | Test corpus, golden TXT exports, lossy-feature fixtures |
 | [`design_docs/`](design_docs/) | Design drafts, the implementation plan, and the archived future-work roadmap |
-| [`tools/`](tools/) | Local runtime helpers (portable Pandoc, Paged.js) — gitignored |
+| [`tools/`](tools/) | Local runtime helpers (portable Pandoc) — gitignored; Paged.js is vendored at `engine/crates/azodoc-pdf/assets/` |
 
 Engine crates: `azodoc-model` (Prima types + validation) ·
 `azodoc-container` (header/ZIP/detection/fidelity rewrite/recovery) ·
 `azodoc-convert` (loss reporting, TXT export) · `azodoc-md` · `azodoc-html` ·
-`azodoc-docx` (Pandoc bridge) · `azodoc-pdf` (headless printing) ·
+`azodoc-docx` (Pandoc bridge) · `azodoc-pdf` (CDP + Paged.js publishing) ·
 `athanor-cli`.
 
 ```bash
-cd engine && cargo test    # 77 tests; DOCX/PDF e2e auto-skip if tools are absent
+cd engine && cargo test    # 88 tests; DOCX/PDF e2e auto-skip if tools are absent
 ```
 
 ## Documentation
 
 - **[Design draft (Chinese)](design_docs/SDOC%20Document%20Model%20v0.1%20—%20草案.md)** — the original concept draft
 - **[Implementation plan (Chinese)](design_docs/Azodoc%20v0.1%20—%20落地方案.md)** — the plan this repo was built from, with milestone acceptance records
-- **[Future work / 可选项](design_docs/Future%20Work%20—%20可选项与后续计划.md)** — archived roadmap options (editor prototype, Paged.js publishing, native OOXML, AI pipeline, …)
+- **[Future work / 可选项](design_docs/Future%20Work%20—%20可选项与后续计划.md)** — archived roadmap options (editor prototype, native OOXML, …); A2 (AI pipeline) and B1 (Paged.js publishing) have shipped
 - **[spec/](spec/)** — normative container/package/model/loss specifications
 
 ## License

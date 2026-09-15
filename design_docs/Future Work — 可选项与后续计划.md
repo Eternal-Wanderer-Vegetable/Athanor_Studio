@@ -3,6 +3,7 @@
 > **Status:** Archived roadmap options — **not scheduled**; none of this is being executed in the current work stream.
 > **Status（中文）:** 存档的未来计划——**未排期**；本文所列内容均不在当前工作流中执行。
 > **Date archived:** 2026-09-15 · **Baseline:** M0–M5 complete (`git log`: 627147d), 77 tests green
+> **2026-09-15 更新：** C7/A2/B1 已交付（提交 686a2bd 前 468780c 81e5d87），CI 建立，全仓 88 测试绿。
 > **Primary doc:** 《Azodoc v0.1 — 落地方案》（同目录）；本文是其"下一步"候选池的正式存档。
 
 ---
@@ -33,6 +34,12 @@
 
 ### A2. 语义层 AI 管线演示（Prima ↔ LLM 示例）
 
+> **状态（2026-09-15 更新）：已交付。** `athanor-cli/src/ai_demo.rs` +
+> `examples/ai_pipeline.rs` + `tests/a2_tests.rs`：`AiProvider` 抽象
+> （离线 `FakeProvider` / OpenAI 兼容 `HttpProvider`），标注带
+> confidence/source、改写以 `ai:*` 作者落链，幻觉块 ID 安全丢弃，
+> history 可审计、checkout 可回滚；离线测试进 CI。
+
 - **背景**：草案的差异化卖点之一是"AI 原生"：修订作者类型有 `ai`、语义层允许
   `confidence/source` 标注。目前引擎提供了机制，缺一个端到端示例证明价值。
 - **方案**：示例程序读取 `.azodoc` → 把纯文本喂给 LLM → 结构化输出（概念标注 +
@@ -54,6 +61,13 @@
 ## B. 转换与格式类
 
 ### B1. Paged.js / CDP 出版集成（页码、运行头）
+
+> **状态（2026-09-15 更新）：已交付。** `azodoc-pdf` 新增最小自实现 CDP 客户端
+> （`cdp.rs`，tungstenite 同步 WS）与 `paged.rs`（`augment_print_html` +
+> `print_html_to_pdf_paged`）：HTML 内注入 `PagedConfig{auto, after}`、CDP 等
+> `pagedjs:rendered` 等价完成回调后再 `Page.printToPDF`，竞态从根上消除。
+> polyfill（Paged.js v0.4.3，MIT）已 vendor 进 `engine/crates/azodoc-pdf/assets/`。
+> publish 默认走分页路径，`--no-paged` 回退直印；layout_hash 输入含分页模式。
 
 - **背景**：M5 基线用 Chromium 原生 `--print-to-pdf`（无页码边盒/运行头）。
   Paged.js 注入已实测存在竞态：CLI 的 `--virtual-time-budget` 与 Paged.js 异步分页
@@ -179,11 +193,14 @@
 
 ## 建议的重启顺序（当未来某天继续时）
 
-1. **C7 许可证统一**（半天，解决仓库法律状态的不一致）
-2. **A2 AI 管线示例**（小而亮眼，验证"AI 原生"叙事）
-3. **B1 Paged.js/CDP 出版**（补齐出版品质）
+1. ~~**C7 许可证统一**~~ —— 已完成（2026-09-15）
+2. ~~**A2 AI 管线示例**~~ —— 已完成（2026-09-15）
+3. ~~**B1 Paged.js/CDP 出版**~~ —— 已完成（2026-09-15）
 4. **A1 Aludel 编辑器**（最大的产品价值，附带 C1/C5 的自然动力）
 5. **B2 原生 OOXML**（长期依赖瘦身）
+
+> 2026-09-15 追记：本日还建立了 GitHub Actions CI（双平台 rustfmt/clippy/
+> test 矩阵）。A2/B1 交付后全仓 88 项测试绿。
 
 > 本文由 2026-09-15 的工作会话存档。重启任一项时：以落地方案 §9 的验收风格
 > 为每项立"可执行验收标准"，沿用 §10 测试体系（语料/恒等/夹具/友好失败）。

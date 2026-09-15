@@ -37,8 +37,11 @@ PDF 定格但僵死、HTML 万能却与表现纠缠。Azodoc 把它们统一：
 ## 当前状态
 
 路线图 **M0–M5 全部完成**（规范 → 容器核心 → 转换器 → 修订与语义 → DOCX →
-PDF 出版）。**77 项测试全部通过。**
-未来方向存档于[未来计划文档](design_docs/Future%20Work%20—%20可选项与后续计划.md)。
+PDF 出版），并完成两项未来计划存档项：**A2**——AI 管线示例（LLM 产出语义
+标注与改写修订，`ai:*` 作者全程可审计）与 **B1**——Paged.js/CDP 出版
+（页脚页码、运行头、无竞态分页）。**88 项测试全部通过。** CI 经
+GitHub Actions 在 Ubuntu/Windows 双平台跑 rustfmt + clippy + 全量测试。
+其余方向存档于[未来计划文档](design_docs/Future%20Work%20—%20可选项与后续计划.md)。
 
 | 格式 | 导入 | 导出 |
 |---|---|---|
@@ -46,7 +49,7 @@ PDF 出版）。**77 项测试全部通过。**
 | HTML（自包含单文件输出，导入前消毒） | ✅ | ✅ |
 | DOCX（经 Pandoc 子进程桥接——GPL 在进程边界隔离） | ✅ | ✅ |
 | 纯文本（最后一道恢复通道，常驻容器缓存） | ✅ | ✅ |
-| PDF 出版（无头 Chromium/Edge；出版档案） | — | ✅ |
+| PDF 出版（无头 Chromium/Edge + Paged.js 分页：页码与运行头；出版档案） | — | ✅ |
 
 DOCX 导入会清点 Pandoc 静默丢弃的部件（页眉/页脚/批注）并报告为
 `unsupported`——没有任何东西会悄悄消失。未安装 Pandoc 时，DOCX 功能优雅缺席
@@ -88,8 +91,13 @@ athanor checkout doc.azodoc --revision rev_01J… # content == 快照，ID 原�
 athanor annotate doc.azodoc --block blk_01J… --type Concept \
     --value '{"label":"演示"}' --exact "引用文本" --author ai:model-x
 
-# 出版（无头 Edge/Chrome → PDF + 冻结出版档案）
+# 出版（无头 Edge/Chrome + Paged.js 分页 → PDF + 冻结出版档案）
 athanor publish doc.azodoc --out out.pdf
+athanor publish doc.azodoc --no-paged            # Chromium 直印，无页码边盒
+
+# AI 管线演示（默认离线 FakeProvider；LLM 产出带 confidence 的 ai:* 标注
+# 与改写修订，可人工复核并回滚）
+cargo run -p athanor-cli --example ai_pipeline -- doc.azodoc
 
 # 抢救损坏文件（绝不修改源文件）
 athanor recover broken.azodoc -o recovered/
@@ -121,26 +129,26 @@ JSON 字段、把未知节点类型包装为带载荷的 `unknown` 节点。旧�
 
 | 路径 | 内容 |
 |---|---|
-| [`engine/`](engine/) | Athanor 引擎——Rust workspace（7 个 crate，77 项测试） |
+| [`engine/`](engine/) | Athanor 引擎——Rust workspace（8 个 crate，88 项测试） |
 | [`spec/`](spec/) | Azodoc v1.0 规范（容器/包/模型/降级）+ JSON Schema + 黄金夹具 |
 | [`corpus/`](corpus/) | 测试语料、TXT 黄金导出、有损特性夹具 |
 | [`design_docs/`](design_docs/) | 设计草案、落地方案、已存档的未来计划 |
-| [`tools/`](tools/) | 本地运行时辅助（便携版 Pandoc、Paged.js）——已 gitignore |
+| [`tools/`](tools/) | 本地运行时辅助（便携版 Pandoc）——已 gitignore；Paged.js 已 vendor 至 `engine/crates/azodoc-pdf/assets/` |
 
 引擎 crate：`azodoc-model`（Prima 类型 + 校验）·
 `azodoc-container`（头/ZIP/探测/保真重写/恢复）·
 `azodoc-convert`（损失报告、TXT 导出）· `azodoc-md` · `azodoc-html` ·
-`azodoc-docx`（Pandoc 桥）· `azodoc-pdf`（无头打印）· `athanor-cli`。
+`azodoc-docx`（Pandoc 桥）· `azodoc-pdf`（CDP + Paged.js 出版）· `athanor-cli`。
 
 ```bash
-cd engine && cargo test    # 77 项测试；DOCX/PDF e2e 在工具缺席时自动跳过
+cd engine && cargo test    # 88 项测试；DOCX/PDF e2e 在工具缺席时自动跳过
 ```
 
 ## 文档
 
 - **[设计草案](design_docs/SDOC%20Document%20Model%20v0.1%20—%20草案.md)** — 最初的概念草案
 - **[落地方案](design_docs/Azodoc%20v0.1%20—%20落地方案.md)** — 本仓库据此落地，附各里程碑验收记录
-- **[未来计划 / 可选项](design_docs/Future%20Work%20—%20可选项与后续计划.md)** — 已存档的路线图候选（编辑器原型、Paged.js 出版、原生 OOXML、AI 管线……）
+- **[未来计划 / 可选项](design_docs/Future%20Work%20—%20可选项与后续计划.md)** — 已存档的路线图候选（编辑器原型、原生 OOXML……）；A2（AI 管线）与 B1（Paged.js 出版）已交付
 - **[spec/](spec/)** — 容器/包/模型/降级的规范文本
 
 ## 许可证
