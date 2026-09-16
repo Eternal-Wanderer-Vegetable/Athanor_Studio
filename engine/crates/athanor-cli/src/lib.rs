@@ -30,6 +30,7 @@ use azodoc_convert::{
 };
 use azodoc_model::id::{AzodocId, IdKind};
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
 use std::path::Path;
 
 pub fn sha256_hex(data: &[u8]) -> String {
@@ -187,8 +188,76 @@ pub fn cmd_info(path: &Path, as_json: bool) -> i32 {
     if !unknown.is_empty() {
         println!("未知 manifest 字段（R2 保留）: {}", unknown.join(", "));
     }
+    print_archive_summary(&mut c, &m);
     print_warnings(&warnings);
     0
+}
+
+/// Show the conversion loss archive and publication records without requiring
+/// callers to inspect individual container entries.
+fn print_archive_summary(c: &mut Container, manifest: &azodoc_model::manifest::Manifest) {
+    let mut loss = BTreeMap::<String, u64>::new();
+    for report in &manifest.reports {
+        let Ok(bytes) = c.read_entry(&report.path) else {
+            continue;
+        };
+        let Ok(value) = serde_json::from_slice::<Value>(&bytes) else {
+            continue;
+        };
+        let Some(counts) = value.pointer("/summary/loss").and_then(Value::as_object) else {
+            continue;
+        };
+        for (class, count) in counts {
+            if let Some(count) = count.as_u64() {
+                *loss.entry(class.clone()).or_default() += count;
+            }
+        }
+    }
+    println!("转换损失汇总:");
+    if loss.is_empty() {
+        println!("  无转换报告");
+    } else {
+        for (class, count) in loss {
+            println!("  {class:<12} {count}");
+        }
+    }
+
+    println!("出版历史:");
+    let Ok(bytes) = c.read_entry("publication/publication.json") else {
+        println!("  无");
+        return;
+    };
+    let Ok(layer) = serde_json::from_slice::<Value>(&bytes) else {
+        println!("  <出版层损坏>");
+        return;
+    };
+    let Some(publications) = layer.get("publications").and_then(Value::as_array) else {
+        println!("  无");
+        return;
+    };
+    if publications.is_empty() {
+        println!("  无");
+        return;
+    }
+    for publication in publications {
+        let id = publication
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or("<无 id>");
+        let created = publication
+            .get("created_at")
+            .and_then(Value::as_str)
+            .unwrap_or("<无时间>");
+        let pages = publication
+            .pointer("/page/count")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let layout = publication
+            .get("layout_hash")
+            .and_then(Value::as_str)
+            .unwrap_or("<无>");
+        println!("  {id} · {created} · {pages} 页 · layout {layout}");
+    }
 }
 
 pub(crate) fn print_warnings(warnings: &[String]) {

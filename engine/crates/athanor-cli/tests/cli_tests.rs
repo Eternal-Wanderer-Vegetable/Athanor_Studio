@@ -66,6 +66,10 @@ fn new_verify_info_cycle() {
     let i = run(&["info", doc.to_str().unwrap()]);
     assert!(stdout(&i).contains("测试文档"));
     assert!(stdout(&i).contains("prefixed"));
+    assert!(stdout(&i).contains("转换损失汇总:"));
+    assert!(stdout(&i).contains("出版历史:"));
+    assert!(stdout(&i).contains("无转换报告"));
+    assert!(stdout(&i).contains("无\n"));
 
     // 不覆盖已有文件
     let again = run(&["new", doc.to_str().unwrap(), "--title", "另一个"]);
