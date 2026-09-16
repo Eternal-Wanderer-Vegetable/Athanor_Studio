@@ -1,0 +1,17 @@
+[package]
+name = "azodoc-pm"
+description = "Azodoc Prima ↔ ProseMirror JSON 双向转换与 schema 生成（Aludel 编辑核心，M6）"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+azodoc-model = { path = "../azodoc-model" }
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+azodoc-convert = { path = "../azodoc-convert" }
+azodoc-md = { path = "../azodoc-md" }
+azodoc-html = { path = "../azodoc-html" }
+zip.workspace = true

@@ -235,6 +235,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "azodoc-pm"
+version = "0.1.0"
+dependencies = [
+ "azodoc-convert",
+ "azodoc-html",
+ "azodoc-md",
+ "azodoc-model",
+ "serde_json",
+ "thiserror",
+ "zip",
+]
+
+[[package]]
 name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

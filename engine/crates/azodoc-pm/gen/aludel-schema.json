@@ -1,0 +1,442 @@
+{
+  "$azodoc": {
+    "generated_by": "azodoc-pm (generate bin)",
+    "source_of_truth": "engine/crates/azodoc-pm/src/mapping.rs",
+    "regenerate": "cargo run -p azodoc-pm --bin generate"
+  },
+  "nodes": {
+    "doc": {
+      "content": "block*",
+      "attrs": {
+        "schema_version": {
+          "default": "1.0"
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "section": {
+      "group": "block",
+      "content": "block*",
+      "attrs": {
+        "id": {
+          "default": ""
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "paragraph": {
+      "group": "block",
+      "content": "inline*",
+      "attrs": {
+        "id": {
+          "default": ""
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "heading": {
+      "group": "block",
+      "content": "inline*",
+      "attrs": {
+        "id": {
+          "default": ""
+        },
+        "level": {
+          "default": 1
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "quote": {
+      "group": "block",
+      "content": "block*",
+      "attrs": {
+        "id": {
+          "default": ""
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "list": {
+      "group": "block",
+      "content": "list_item*",
+      "attrs": {
+        "id": {
+          "default": ""
+        },
+        "style": {
+          "default": "bullet"
+        },
+        "start": {
+          "default": null
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "list_item": {
+      "content": "block*",
+      "attrs": {
+        "id": {
+          "default": ""
+        },
+        "checked": {
+          "default": null
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "code_block": {
+      "group": "block",
+      "content": "text*",
+      "code": true,
+      "attrs": {
+        "id": {
+          "default": ""
+        },
+        "language": {
+          "default": null
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "table": {
+      "group": "block",
+      "content": "table_row*",
+      "attrs": {
+        "id": {
+          "default": ""
+        },
+        "header_row": {
+          "default": null
+        },
+        "columns": {
+          "default": null
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "table_row": {
+      "content": "table_cell*",
+      "attrs": {
+        "id": {
+          "default": ""
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "table_cell": {
+      "content": "block*",
+      "attrs": {
+        "id": {
+          "default": ""
+        },
+        "column": {
+          "default": 0
+        },
+        "colSpan": {
+          "default": null
+        },
+        "rowSpan": {
+          "default": null
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "figure": {
+      "group": "block",
+      "attrs": {
+        "id": {
+          "default": ""
+        },
+        "asset": {
+          "default": ""
+        },
+        "alt": {
+          "default": ""
+        },
+        "caption": {
+          "default": null
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "image": {
+      "group": "block",
+      "attrs": {
+        "id": {
+          "default": ""
+        },
+        "asset": {
+          "default": ""
+        },
+        "alt": {
+          "default": ""
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "horizontal_rule": {
+      "group": "block",
+      "attrs": {
+        "id": {
+          "default": ""
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "math_block": {
+      "group": "block",
+      "attrs": {
+        "id": {
+          "default": ""
+        },
+        "latex": {
+          "default": ""
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "callout": {
+      "group": "block",
+      "content": "block*",
+      "attrs": {
+        "id": {
+          "default": ""
+        },
+        "variant": {
+          "default": "info"
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "embed": {
+      "group": "block",
+      "attrs": {
+        "id": {
+          "default": ""
+        },
+        "asset": {
+          "default": ""
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "footnote": {
+      "group": "block",
+      "content": "block*",
+      "attrs": {
+        "id": {
+          "default": ""
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "unknown_block": {
+      "group": "block",
+      "content": "inline*",
+      "attrs": {
+        "id": {
+          "default": ""
+        },
+        "origin": {
+          "default": ""
+        },
+        "loss_class": {
+          "default": ""
+        },
+        "summary": {
+          "default": ""
+        },
+        "payload_ref": {
+          "default": null
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "text": {
+      "group": "inline"
+    },
+    "hard_break": {
+      "group": "inline",
+      "attrs": {
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "footnote_ref": {
+      "group": "inline",
+      "attrs": {
+        "id": {
+          "default": ""
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "inline_math": {
+      "group": "inline",
+      "attrs": {
+        "latex": {
+          "default": ""
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "inline_image": {
+      "group": "inline",
+      "attrs": {
+        "asset": {
+          "default": ""
+        },
+        "alt": {
+          "default": ""
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "mention": {
+      "group": "inline",
+      "attrs": {
+        "target": {
+          "default": ""
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "cite": {
+      "group": "inline",
+      "attrs": {
+        "key": {
+          "default": ""
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "unknown_span": {
+      "group": "inline",
+      "content": "inline*",
+      "attrs": {
+        "origin": {
+          "default": ""
+        },
+        "loss_class": {
+          "default": ""
+        },
+        "summary": {
+          "default": ""
+        },
+        "payload_ref": {
+          "default": null
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    }
+  },
+  "marks": {
+    "link": {
+      "attrs": {
+        "url": {
+          "default": ""
+        },
+        "title": {
+          "default": null
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "strong": {
+      "attrs": {
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "em": {
+      "attrs": {
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "underline": {
+      "attrs": {
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "strike": {
+      "attrs": {
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "code": {
+      "attrs": {
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "span_extra": {
+      "attrs": {
+        "data": {
+          "default": null
+        }
+      }
+    }
+  }
+}

@@ -8,6 +8,7 @@ members = [
     "crates/azodoc-html",
     "crates/azodoc-docx",
     "crates/azodoc-pdf",
+    "crates/azodoc-pm",
     "crates/athanor-cli",
 ]
 
