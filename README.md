@@ -58,7 +58,8 @@ clippy + the full test matrix on Ubuntu & Windows via GitHub Actions.
 Remaining directions are archived in the
 [future-work document](design_docs/Future%20Work%20—%20可选项与后续计划.md).
 
-Try the editor prototype: `cd engine && cargo run -p aludel -- <doc.azodoc>` —
+Try the editor prototype: from the `engine` directory run
+`cargo run -p aludel -- doc.azodoc` —
 it opens in a local browser where you can edit, save (revisions commit
 automatically) and verify.
 

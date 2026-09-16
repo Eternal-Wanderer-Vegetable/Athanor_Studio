@@ -45,6 +45,9 @@ Aludel 编辑器（ProseMirror 前端 + 保存落链管线：编辑会话产生 
 Ubuntu/Windows 双平台跑 rustfmt + clippy + 全量测试。
 其余方向存档于[未来计划文档](design_docs/Future%20Work%20—%20可选项与后续计划.md)。
 
+编辑器原型体验：在 `engine` 目录下执行 `cargo run -p aludel -- doc.azodoc`，
+本地浏览器打开后即可编辑、保存（修订自动落链）与校验。
+
 | 格式 | 导入 | 导出 |
 |---|---|---|
 | Markdown（GFM：表格/任务列表/脚注/数学/提示块） | ✅ | ✅ |
@@ -104,7 +107,6 @@ cargo run -p athanor-cli --example ai_pipeline -- doc.azodoc
 # 编辑器原型（本机浏览器打开：编辑、保存自动落链 author:human、侧栏
 # 修订历史 / 标注 / 损失盘点）
 cargo run -p aludel -- doc.azodoc
-
 # 抢救损坏文件（绝不修改源文件）
 athanor recover broken.azodoc -o recovered/
 ```
