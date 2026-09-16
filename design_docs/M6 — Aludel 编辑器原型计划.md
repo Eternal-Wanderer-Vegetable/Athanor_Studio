@@ -1,9 +1,9 @@
 # M6 — Aludel 编辑器原型：RFC 与执行计划
 
-> **Status:** **M6.1 + M6.2 + M6.3 已交付**（2026-09-16；azodoc-pm 19 项、aludel 7 项
-> 测试，全仓 114 测试绿；编辑器经浏览器实测）。本文存档自 Future Work §A1 的重启
-> 规划，含完整 RFC、Prima ↔ ProseMirror 映射表初版与分阶段计划；**后续修订直接改本文**。
-> **下一阶段：** M6.4（验收打磨与文档收尾）。
+> **Status:** **M6 全部交付完成**（2026-09-16，M6.1–M6.4 四阶段；A1 验收四条
+> 全过，落地方案 §9 路线图就此走完）。全仓 114 测试绿。本文存档自
+> Future Work §A1 的重启规划，含完整 RFC、Prima ↔ ProseMirror 映射表、
+> 分阶段计划与各阶段实施记录；**后续修订直接改本文**。
 > **上游依据:** 《Azodoc v0.1 — 落地方案》§9 M6 行 + 《Future Work — 可选项与后续计划》§A1。
 > **基线:** M0–M5 + C7/A2/B1 已交付，CI 双平台，全仓 88 测试绿。
 
@@ -312,10 +312,32 @@ UI：中央编辑器 + 右侧栏（修订历史 author 徽标、标注列表 det
 >   出现 human 修订；文件经 `athanor verify` 通过、编辑文本确认写入 content.json。
 > - 全仓 114 测试绿（Rust 侧），clippy/fmt 清零。
 
-### M6.4 — 验收打磨与 CI（约 3–5 天）
+### M6.4 — 验收打磨与 CI（约 3–5 天）【已交付】
 
 原型期提交 `editor/dist` 入库（CI 只跑 Rust + schema 黄金 diff；Node 矩阵刻意推迟）；
 design_docs 增补 M6 验收记录；README 中英状态更新；四条验收逐条演练。
+
+> **实施记录（2026-09-16，全部达成）**
+> - CI 无需改动：`.github/workflows/ci.yml` 的 rustfmt + clippy + cargo test 已
+>   覆盖 schema 黄金比对（`gen/` 产物入库，漂移即红）与全部 e2e；Node 不进 CI
+>   （dist 已入库，RFC 决策兑现）。
+> - README 中英双语更新：当前状态（M0–M6 全部完成、114 测试、A1/A2/B1 已交付）、
+>   快速上手补编辑器启动命令、仓库结构（10 crate）、文档索引补本计划文档。
+> - Future Work §A1 标记已交付；"建议的重启顺序"仅余 B2（原生 OOXML）。
+
+### 验收演练结论（落地方案 §9 M6 行 + Future Work §A1，四条全过）
+
+| # | 验收 | 证据 |
+|---|---|---|
+| ① | 编辑器状态与 Prima **双向无损**（以 M2 语料为准） | `azodoc-pm` 19 项测试：全类型夹具、spec 三黄金样例（含 forward-compat 的 R2 未知内容）、**M2 语料四文件严格恒等**；幂等/合并/嵌套重建用例 |
+| ② | M2 语料 打开→编辑→保存→`athanor verify` 通过 | e2e `save_pipeline_lands_human_revision_and_passes_verify`（in-process，`verify_cmd::run == 0`）+ 浏览器实测（IAB：语料渲染 17 段/4 标题/3 列表/2 任务项 → 编辑器内输入 → 保存 → CLI `athanor verify` 退出码 0、编辑文本确认写入 content.json） |
+| ③ | 编辑会话产生 `author: human` 修订 | 同上两项：history 顶部条目 `author_type == "human"`，manifest.current_revision 推进；浏览器侧栏即时显示 `human rev_… ⟵当前` |
+| ④ | 标注随编辑自动重定位 | 保存管线第 4 步复用 `relocate_annotations_layer`；e2e 断言 `unchanged ≥ 1 且 detached == 0`；浏览器 toast 展示"未变/重锚/迁移/失配"统计 |
+
+**M6 就此收尾。** 后续自然延伸（未排期）：A3 Athanor Studio 桌面壳（复用
+aludel 的 Rust API 面与 Web 前端）、C1 剩余半件（生成 Schema 与手写 spec 的
+结构性 diff）、C5 修订层 delta 模式（现在可依真实编辑保存频率设计）、
+B3 KaTeX 数学呈现（编辑器内数学当前为 LaTeX 源码形态）。
 
 ---
 

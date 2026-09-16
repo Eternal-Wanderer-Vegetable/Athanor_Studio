@@ -36,11 +36,13 @@ PDF 定格但僵死、HTML 万能却与表现纠缠。Azodoc 把它们统一：
 
 ## 当前状态
 
-路线图 **M0–M5 全部完成**（规范 → 容器核心 → 转换器 → 修订与语义 → DOCX →
-PDF 出版），并完成两项未来计划存档项：**A2**——AI 管线示例（LLM 产出语义
-标注与改写修订，`ai:*` 作者全程可审计）与 **B1**——Paged.js/CDP 出版
-（页脚页码、运行头、无竞态分页）。**88 项测试全部通过。** CI 经
-GitHub Actions 在 Ubuntu/Windows 双平台跑 rustfmt + clippy + 全量测试。
+路线图 **M0–M6 全部完成**（规范 → 容器核心 → 转换器 → 修订与语义 → DOCX →
+PDF 出版 → **Aludel 编辑器原型**），并完成三项未来计划存档项：**A1**——
+Aludel 编辑器（ProseMirror 前端 + 保存落链管线：编辑会话产生 `author: human`
+修订、标注随编辑自动重定位）、**A2**——AI 管线示例（LLM 产出语义标注与
+改写修订，`ai:*` 作者全程可审计）与 **B1**——Paged.js/CDP 出版（页脚页码、
+运行头、无竞态分页）。**114 项测试全部通过。** CI 经 GitHub Actions 在
+Ubuntu/Windows 双平台跑 rustfmt + clippy + 全量测试。
 其余方向存档于[未来计划文档](design_docs/Future%20Work%20—%20可选项与后续计划.md)。
 
 | 格式 | 导入 | 导出 |
@@ -99,6 +101,10 @@ athanor publish doc.azodoc --no-paged            # Chromium 直印，无页码�
 # 与改写修订，可人工复核并回滚）
 cargo run -p athanor-cli --example ai_pipeline -- doc.azodoc
 
+# 编辑器原型（本机浏览器打开：编辑、保存自动落链 author:human、侧栏
+# 修订历史 / 标注 / 损失盘点）
+cargo run -p aludel -- doc.azodoc
+
 # 抢救损坏文件（绝不修改源文件）
 athanor recover broken.azodoc -o recovered/
 ```
@@ -129,7 +135,7 @@ JSON 字段、把未知节点类型包装为带载荷的 `unknown` 节点。旧�
 
 | 路径 | 内容 |
 |---|---|
-| [`engine/`](engine/) | Athanor 引擎——Rust workspace（8 个 crate，88 项测试） |
+| [`engine/`](engine/) | Athanor 引擎——Rust workspace（10 个 crate，114 项测试） |
 | [`spec/`](spec/) | Azodoc v1.0 规范（容器/包/模型/降级）+ JSON Schema + 黄金夹具 |
 | [`corpus/`](corpus/) | 测试语料、TXT 黄金导出、有损特性夹具 |
 | [`design_docs/`](design_docs/) | 设计草案、落地方案、已存档的未来计划 |
@@ -138,17 +144,20 @@ JSON 字段、把未知节点类型包装为带载荷的 `unknown` 节点。旧�
 引擎 crate：`azodoc-model`（Prima 类型 + 校验）·
 `azodoc-container`（头/ZIP/探测/保真重写/恢复）·
 `azodoc-convert`（损失报告、TXT 导出）· `azodoc-md` · `azodoc-html` ·
-`azodoc-docx`（Pandoc 桥）· `azodoc-pdf`（CDP + Paged.js 出版）· `athanor-cli`。
+`azodoc-docx`（Pandoc 桥）· `azodoc-pdf`（CDP + Paged.js 出版）·
+`azodoc-pm`（Prima ↔ ProseMirror 转换与 schema 生成）· `athanor-cli` ·
+`aludel`（编辑器原型：本地 server + Web 前端）。
 
 ```bash
-cd engine && cargo test    # 88 项测试；DOCX/PDF e2e 在工具缺席时自动跳过
+cd engine && cargo test    # 114 项测试；DOCX/PDF e2e 在工具缺席时自动跳过
 ```
 
 ## 文档
 
 - **[设计草案](design_docs/SDOC%20Document%20Model%20v0.1%20—%20草案.md)** — 最初的概念草案
 - **[落地方案](design_docs/Azodoc%20v0.1%20—%20落地方案.md)** — 本仓库据此落地，附各里程碑验收记录
-- **[未来计划 / 可选项](design_docs/Future%20Work%20—%20可选项与后续计划.md)** — 已存档的路线图候选（编辑器原型、原生 OOXML……）；A2（AI 管线）与 B1（Paged.js 出版）已交付
+- **[M6 编辑器原型计划](design_docs/M6%20—%20Aludel%20编辑器原型计划.md)** — A1 的 RFC、Prima ↔ ProseMirror 映射表与分阶段实施记录
+- **[未来计划 / 可选项](design_docs/Future%20Work%20—%20可选项与后续计划.md)** — 已存档的路线图候选（原生 OOXML 等）；A1（编辑器）、A2（AI 管线）与 B1（Paged.js 出版）已交付
 - **[spec/](spec/)** — 容器/包/模型/降级的规范文本
 
 ## 许可证

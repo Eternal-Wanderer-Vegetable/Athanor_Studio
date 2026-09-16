@@ -46,14 +46,21 @@ universal but entangled with presentation. Azodoc unifies them:
 
 ## Current status
 
-Roadmap **M0–M5 complete** (spec → container core → converters → revisions &
-semantics → DOCX → PDF publishing), plus two follow-ups from the future-work
-archive: **A2** — an AI pipeline example (LLM → annotations & revisions with
-auditable `ai:*` authorship) and **B1** — Paged.js/CDP publishing (page-number
-footers, running headers, race-free pagination). **88 tests passing.** CI runs
-rustfmt + clippy + the full test matrix on Ubuntu & Windows via GitHub Actions.
+Roadmap **M0–M6 complete** (spec → container core → converters → revisions &
+semantics → DOCX → PDF publishing → **the Aludel editor prototype**), plus three
+follow-ups from the future-work archive: **A1** — the Aludel editor (ProseMirror
+front end + save-with-commit pipeline: editing sessions produce
+`author: human` revisions and annotations relocate automatically), **A2** — an
+AI pipeline example (LLM → annotations & revisions with auditable `ai:*`
+authorship) and **B1** — Paged.js/CDP publishing (page-number footers, running
+headers, race-free pagination). **114 tests passing.** CI runs rustfmt +
+clippy + the full test matrix on Ubuntu & Windows via GitHub Actions.
 Remaining directions are archived in the
 [future-work document](design_docs/Future%20Work%20—%20可选项与后续计划.md).
+
+Try the editor prototype: `cd engine && cargo run -p aludel -- <doc.azodoc>` —
+it opens in a local browser where you can edit, save (revisions commit
+automatically) and verify.
 
 | Format | Import | Export |
 |---|---|---|
@@ -113,6 +120,10 @@ athanor publish doc.azodoc --no-paged            # plain Chromium print, no marg
 # annotations with confidence + a rewrite revision you can review & roll back)
 cargo run -p athanor-cli --example ai_pipeline -- doc.azodoc
 
+# Editor prototype (opens in a local browser: edit, save auto-commits as
+# author:human, sidebar with revision history / annotations / loss inventory)
+cargo run -p aludel -- doc.azodoc
+
 # Rescue a damaged file (source is never modified)
 athanor recover broken.azodoc -o recovered/
 ```
@@ -145,7 +156,7 @@ newer file loses nothing.
 
 | Path | What |
 |---|---|
-| [`engine/`](engine/) | Athanor engine — Rust workspace (8 crates, 88 tests) |
+| [`engine/`](engine/) | Athanor engine — Rust workspace (10 crates, 114 tests) |
 | [`spec/`](spec/) | Azodoc v1.0 specifications (container, package, model, loss) + JSON Schemas + golden fixtures |
 | [`corpus/`](corpus/) | Test corpus, golden TXT exports, lossy-feature fixtures |
 | [`design_docs/`](design_docs/) | Design drafts, the implementation plan, and the archived future-work roadmap |
@@ -155,17 +166,19 @@ Engine crates: `azodoc-model` (Prima types + validation) ·
 `azodoc-container` (header/ZIP/detection/fidelity rewrite/recovery) ·
 `azodoc-convert` (loss reporting, TXT export) · `azodoc-md` · `azodoc-html` ·
 `azodoc-docx` (Pandoc bridge) · `azodoc-pdf` (CDP + Paged.js publishing) ·
-`athanor-cli`.
+`azodoc-pm` (Prima ↔ ProseMirror conversion & schema generation) ·
+`athanor-cli` · `aludel` (editor prototype: local server + web front end).
 
 ```bash
-cd engine && cargo test    # 88 tests; DOCX/PDF e2e auto-skip if tools are absent
+cd engine && cargo test    # 114 tests; DOCX/PDF e2e auto-skip if tools are absent
 ```
 
 ## Documentation
 
 - **[Design draft (Chinese)](design_docs/SDOC%20Document%20Model%20v0.1%20—%20草案.md)** — the original concept draft
 - **[Implementation plan (Chinese)](design_docs/Azodoc%20v0.1%20—%20落地方案.md)** — the plan this repo was built from, with milestone acceptance records
-- **[Future work / 可选项](design_docs/Future%20Work%20—%20可选项与后续计划.md)** — archived roadmap options (editor prototype, native OOXML, …); A2 (AI pipeline) and B1 (Paged.js publishing) have shipped
+- **[M6 editor prototype plan (Chinese)](design_docs/M6%20—%20Aludel%20编辑器原型计划.md)** — A1's RFC, the Prima ↔ ProseMirror mapping table, and staged implementation records
+- **[Future work / 可选项](design_docs/Future%20Work%20—%20可选项与后续计划.md)** — archived roadmap options (native OOXML, …); A1 (editor), A2 (AI pipeline) and B1 (Paged.js publishing) have shipped
 - **[spec/](spec/)** — normative container/package/model/loss specifications
 
 ## License
