@@ -1,8 +1,8 @@
 # B2 — DOCX 原生 OOXML 读取：RFC 与执行计划
 
-> **Status:** 执行中（2026-09-16 启动）。本文存档自《Future Work — 可选项与后续计划》§B2
-> 的重启规划，含完整 RFC、OOXML → Azodoc 映射表、分阶段计划与各阶段实施记录；
-> **后续修订直接改本文**。
+> **Status:** **已交付**（2026-09-16，P0–P4 全阶段；全仓 169 测试绿）。本文存档自
+> 《Future Work — 可选项与后续计划》§B2 的重启规划，含完整 RFC、OOXML → Azodoc
+> 映射表、分阶段计划与各阶段实施记录；**后续修订直接改本文**。
 > **上游依据:** 《Azodoc v0.1 — 落地方案》§8.1（"DOCX 直读列为 v0.3+ 的 RFC 议题"）
 > + 《Future Work — 可选项与后续计划》§B2 + SDOC 草案 §21（DOCX Compatibility）。
 > **基线:** M0–M5 + C7/A2/B1/A1(M6) 已交付，CI 双平台，全仓 114 测试绿。
@@ -208,7 +208,7 @@ OMML→LaTeX 子集转换列为后续 RFC。
 | `w:tbl`（gridSpan） | table + colSpan | none | — |
 | `w:tbl`（vMerge restart/continue） | table + rowSpan（续标记合并计数） | none | — |
 | `w:tblHeader` | header_row + columns[].name | none | — |
-| 嵌套 `w:tbl` | preserved + unknown 块（cell 内） | preserved_raw | preserved（`docx_nested_table`） |
+| 嵌套 `w:tbl` | table（cell 内直接嵌套——模型 `TableCell.children` 可表达，实施期决议升级为真映射） | none | — |
 | `w:drawing`（pic/blip @r:embed） | figure（独段）/inline_image + asset | none | — |
 | `wp:anchor` 浮动定位 | 同上映射 + 报告定位丢失 | partial | degraded（`docx_floating_image`） |
 | `w:pict` / VML | preserved + unknown span/块 | preserved_raw | preserved（`docx_vml`） |
@@ -249,6 +249,34 @@ OMML→LaTeX 子集转换列为后续 RFC。
 | P4 | `corpus/docx/` 语料 + 黄金测试 + 友好失败套件 + e2e（verify 通过、pandoc 回退不回归）+ README/loss spec token 登记更新 | 全仓 fmt/clippy/test 绿 |
 
 > **实施记录（P0）**：2026-09-16 本 RFC 存档；Future Work §B2 加状态注记。
+>
+> **实施记录（P1）**：`azodoc-docx::ooxml` 全模块落地（error/xml/package/styles/
+> numbering/comments/document/mod）。quick-xml 0.42 由传递依赖转为直接依赖（零新增
+> 传递重量）；实体引用按 `Event::GeneralRef` 独立事件解析（0.42 语义），未知实体
+> 原样保留不展开。CLI `--reader auto|native|pandoc` 接线；`cmd_import` 保持原签名
+> （默认 auto，18 处既有测试调用零改动），新增 `cmd_import_reader`。
+>
+> **实施记录（P2）**：styles→theme.json 写入器（slug 规则 + `title` 原名 + 仅收
+> 被引用样式；sectPr→defaults.page）；页眉/页脚/自定义 XML/未知部件整件 preserved；
+> OLE/宏 `preserved_quarantined`；core.xml → DocumentMeta（creator 走 doc_extra，
+> 覆盖 created_at/modified_at）。
+>
+> **实施记录（P3）**：批注 → annotations（text_quote→block 降级链；author/date
+> 保留；schema 校验测试）；tracked changes 终稿视图 + 原件 preserved + 按作者聚合
+> 事件。`ImportOutput` 增 `annotations`/`theme` 字段；`cmd_import` 装配 semantics/
+> presentation 层并登记 manifest。
+>
+> **实施记录（P4）**：`corpus/docx/{basic,lossy}.docx` + golden（content.json +
+> loss 概要，AZODOC_WRITE_GOLDEN 重新生成；夹具由 tools/docx_fixtures/generate.py
+> 确定性生成）；友好失败套件（截断 zip / 缺 document.xml / 畸形 XML）；CLI e2e
+> （verify 通过、semantics/presentation 层装配、preserved 载荷落容器、converter 名
+> 断言、pandoc 回退）。converter 名缺陷修复：导入 `athanor-docx` /
+> `athanor-docx-pandoc`，transmute 导出修正为 `athanor-docx`（原误报 athanor-txt，
+> 导入曾误报 athanor-html）。
+>
+> **验收结果**：全仓 169 测试绿（新增 55：b2_ooxml 31 + b2_golden 4 + b2_tests 5 +
+> 模块单元 15）；clippy `-D warnings` 清零；rustfmt 通过。token 表最终新增
+> `docx_footnote_missing`、`docx_table_edge`（§7 清单之外），已同步 loss 规范 §4.2。
 
 ---
 
@@ -275,7 +303,8 @@ OMML→LaTeX 子集转换列为后续 RFC。
   docx_field、docx_sdt、docx_alternate_content、docx_nested_table、docx_vml、
   docx_run_props、docx_paragraph_props、docx_bookmark、docx_tab、docx_page_break、
   docx_internal_link、docx_floating_image、docx_endnotes、docx_numbering_edge、
-  docx_ole_object、docx_customxml、docx_unknown_part、docx_reader_fallback）。
+  docx_ole_object、docx_customxml、docx_unknown_part、docx_reader_fallback、
+  docx_footnote_missing、docx_table_edge——见实施记录 P4）。
 - **语料**：新增 `corpus/docx/{basic,lossy}.docx` + golden（确定性生成脚本入库）。
 - **CI**：不改（原生测试 Pandoc-free；Pandoc 仍装给 M4 回退测试）。
 - **工作流**：实施期每个既有符号编辑前跑 GitNexus impact；提交前

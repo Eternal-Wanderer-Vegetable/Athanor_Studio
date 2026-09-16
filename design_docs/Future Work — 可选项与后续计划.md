@@ -91,11 +91,12 @@
 
 ### B2. DOCX 原生 OOXML 读取 RFC（摆脱 Pandoc）
 
-> **状态（2026-09-16 更新）：已立项，RFC 存档并开始实施。** 见
-> 《B2 — DOCX 原生 OOXML 读取：RFC 与执行计划》：`azodoc-docx::ooxml`
-> 原生读取模块 + CLI `--reader auto|native|pandoc`；样式→theme、批注→
-> annotations、tracked changes 终稿视图 + 原件 preserved；Pandoc 保留为
-> 导出路径与导入 fallback（converter 名区分 `athanor-docx` / `athanor-docx-pandoc`）。
+> **状态（2026-09-16 更新）：已交付。** 见《B2 — DOCX 原生 OOXML 读取：RFC 与
+> 执行计划》：`azodoc-docx::ooxml` 原生读取模块 + CLI `--reader auto|native|pandoc`；
+> 样式→theme（首个表现层写入器）、批注→annotations（首个语义层写入器）、
+> tracked changes 终稿视图 + 原件 preserved；页眉/页脚/OLE/未知部件整件
+> preserved；Pandoc 保留为导出路径与导入 fallback（converter 名区分
+> `athanor-docx` / `athanor-docx-pandoc`）。全仓 169 测试绿。
 
 - **背景**：M4 走 Pandoc 桥（质量好但有外部依赖 + AST 有损：样式/批注/tracked
   changes/页眉页脚被丢）。落地方案 §8.1 已把"原生读取"列为 v0.3+ RFC 议题。
@@ -211,7 +212,8 @@
 3. ~~**B1 Paged.js/CDP 出版**~~ —— 已完成（2026-09-15）
 4. ~~**A1 Aludel 编辑器**~~ —— 已完成（2026-09-16，M6 交付；附带完成了
    C1 的"映射表 ↔ schemars 锁定"半件，结构性 diff 升级仍留待后续）
-5. **B2 原生 OOXML**（长期依赖瘦身）
+5. ~~**B2 原生 OOXML**~~ —— 已完成（2026-09-16，见《B2 — DOCX 原生 OOXML 读取：
+   RFC 与执行计划》；附带完成 C4 在 DOCX 侧的 `preserved_quarantined` 语义）
 
 > 2026-09-15 追记：本日还建立了 GitHub Actions CI（双平台 rustfmt/clippy/
 > test 矩阵）。A2/B1 交付后全仓 88 项测试绿。
