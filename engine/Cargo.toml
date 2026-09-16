@@ -11,6 +11,7 @@ members = [
     "crates/azodoc-pm",
     "crates/athanor-cli",
     "crates/aludel",
+    "crates/studio",
 ]
 
 [workspace.package]
