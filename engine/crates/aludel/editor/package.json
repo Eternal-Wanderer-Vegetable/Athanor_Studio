@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.11.1",
     "prosemirror-commands": "^1.7.0",
     "prosemirror-history": "^1.4.0",
     "prosemirror-keymap": "^1.2.0",

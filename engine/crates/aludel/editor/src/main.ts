@@ -24,6 +24,7 @@ import { keymap } from "prosemirror-keymap";
 import { history, undo, redo } from "prosemirror-history";
 import { schema } from "./schema";
 import "prosemirror-view/style/prosemirror.css";
+import { invoke } from "@tauri-apps/api/core";
 
 interface DocResponse {
   path: string;
@@ -50,6 +51,8 @@ const $ = (id: string): HTMLElement => document.getElementById(id)!;
 
 let view: EditorView;
 let currentDoc: DocResponse | null = null;
+let dirty = false;
+const tauriMode = "__TAURI_INTERNALS__" in window;
 
 // ---------------------------------------------------------------- 装配
 
@@ -91,8 +94,28 @@ function createEditor(docJson: Record<string, unknown>): EditorView {
         return false;
       },
     },
-    dispatchTransaction: (tr: Transaction) => view.updateState(view.state.apply(tr)),
+    dispatchTransaction: (tr: Transaction) => {
+      view.updateState(view.state.apply(tr));
+      dirty = true;
+      document.title = `Athanor Studio — ${currentDoc?.path ?? "未命名"} *`;
+    },
   });
+}
+
+async function command<T>(name: string, args: Record<string, unknown>): Promise<T> {
+  return invoke<T>(name, args);
+}
+
+function mountDocument(d: DocResponse): void {
+  currentDoc = d;
+  view?.destroy();
+  view = createEditor(d.pm_doc);
+  dirty = false;
+  document.title = `Athanor Studio — ${d.path}`;
+  renderSidebar(d);
+  toolbar();
+  $("save").addEventListener("click", () => void save());
+  $("verify").addEventListener("click", () => void verify());
 }
 
 // ---------------------------------------------------------------- 侧栏
@@ -187,11 +210,15 @@ async function save(): Promise<void> {
   setMsg("保存中…", true);
   try {
     const message = ($("message") as HTMLInputElement).value.trim();
-    const { status, data } = await post("/api/save", {
+    const body = {
       pm_doc: view.state.doc.toJSON(),
       message: message || undefined,
       author_id: "local",
-    });
+    };
+    const result = tauriMode
+      ? { status: 200, data: await command<Record<string, unknown>>("save_document", { sessionId: currentDoc?.path, body }) }
+      : await post("/api/save", body);
+    const { status, data } = result;
     if (status === 200) {
       const rel = (data["relocate"] ?? null) as Record<string, number> | null;
       const relText = rel
@@ -199,9 +226,13 @@ async function save(): Promise<void> {
         : "";
       setMsg(`已落链 ${data["revision"]}（author:human，新 ID ${data["ids_assigned"]}）${relText}`, true);
       // 只刷新侧栏与修订号，不重置编辑器状态（保护光标与未保存输入）
-      const d = await (await fetch("/api/doc")).json();
+      const d = tauriMode
+        ? await command<DocResponse>("open_document", { path: currentDoc?.path })
+        : await (await fetch("/api/doc")).json();
       currentDoc = d as DocResponse;
       renderSidebar(currentDoc);
+      dirty = false;
+      document.title = `Athanor Studio — ${currentDoc.path}`;
     } else {
       setMsg("保存被拒绝: " + (data["error"] ?? status), false);
     }
@@ -217,7 +248,9 @@ async function verify(): Promise<void> {
   btn.disabled = true;
   setMsg("athanor verify 运行中…", true);
   try {
-    const { data } = await post("/api/verify", {});
+    const data = tauriMode
+      ? await command<Record<string, unknown>>("verify_document", { sessionId: currentDoc?.path })
+      : (await post("/api/verify", {})).data;
     setMsg(data["ok"] === true ? "athanor verify 通过 ✓" : "athanor verify 未通过（详见服务端输出）", data["ok"] === true);
   } finally {
     btn.disabled = false;
@@ -269,21 +302,39 @@ function toolbar(): void {
 
 async function boot(): Promise<void> {
   try {
+    if (tauriMode) {
+      setMsg("Athanor Studio 已启动，请点击“打开文档”。", true);
+      $("open").addEventListener("click", () => void openDocument());
+      return;
+    }
     const resp = await fetch("/api/doc");
     if (!resp.ok) {
       const err = (await resp.json()) as { error?: string };
       setMsg("文档打开失败: " + (err.error ?? resp.status), false);
       return;
     }
-    currentDoc = (await resp.json()) as DocResponse;
-    view = createEditor(currentDoc.pm_doc);
-    renderSidebar(currentDoc);
-    toolbar();
-    $("save").addEventListener("click", () => void save());
-    $("verify").addEventListener("click", () => void verify());
+    mountDocument((await resp.json()) as DocResponse);
   } catch (e) {
     setMsg("启动失败: " + (e as Error).stack, false);
   }
 }
+
+async function openDocument(): Promise<void> {
+  const path = window.prompt("Azodoc 文件路径：", currentDoc?.path ?? "");
+  if (!path) return;
+  try {
+    const d = await command<DocResponse>("open_document", { path });
+    mountDocument(d);
+    setMsg("文档已打开。", true);
+  } catch (e) {
+    setMsg(`打开失败: ${e instanceof Error ? e.message : String(e)}`, false);
+  }
+}
+
+window.addEventListener("beforeunload", (event) => {
+  if (!dirty) return;
+  event.preventDefault();
+  event.returnValue = "";
+});
 
 void boot();
