@@ -26,6 +26,12 @@ fn gen_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("gen")
 }
 
+/// 黄金比对忽略换行差异（gen/** 已在 .gitattributes 豁免转换，但旧克隆或
+/// 未知 checkout 配置下仍可能是 CRLF——生成器恒为 LF）。
+fn normalize_eol(s: &str) -> String {
+    s.replace("\r\n", "\n")
+}
+
 #[test]
 fn generated_artifacts_match_committed_golden() {
     for (name, body) in [
@@ -40,7 +46,8 @@ fn generated_artifacts_match_committed_golden() {
             )
         });
         assert_eq!(
-            committed, body,
+            normalize_eol(&committed),
+            normalize_eol(&body),
             "gen/{name} 与重新生成产物不一致——运行 cargo run -p azodoc-pm --bin generate 更新"
         );
     }

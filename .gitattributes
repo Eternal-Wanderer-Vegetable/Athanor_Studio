@@ -2,3 +2,6 @@
 # 必须逐字节稳定（Windows 检出时 autocrlf 会把 LF 改写成 CRLF，破坏比对）。
 corpus/** -text
 spec/** -text
+# 生成物黄金文件（schema 比对）与编辑器单文件构建产物（include_str! 嵌入）
+engine/crates/azodoc-pm/gen/** -text
+engine/crates/aludel/editor/dist/** -text
