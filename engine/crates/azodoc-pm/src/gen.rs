@@ -49,6 +49,11 @@ pub fn schema_spec() -> Value {
         if !d.group.is_empty() {
             spec.insert("group".into(), json!(d.group));
         }
+        // PM 依据 `inline: true` 判定行内节点：缺失时 "inline*" 内容表达式会拒绝
+        // 这些节点（"Mixing inline and block content"）。text 由 PM 特判，无需此标志。
+        if d.group == "inline" && d.pm_name != "text" {
+            spec.insert("inline".into(), json!(true));
+        }
         if let Some(content) = d.content {
             spec.insert("content".into(), json!(content));
         }

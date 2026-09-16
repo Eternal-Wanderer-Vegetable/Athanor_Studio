@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aludel — Azodoc 编辑器（M6）</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body { font-family: "Segoe UI", system-ui, sans-serif; margin: 0; background: #f6f4ef; color: #2c2620; }
+    header { display: flex; align-items: baseline; gap: 12px; padding: 10px 20px; background: #2c2620; color: #f6f4ef; }
+    header h1 { font-size: 18px; margin: 0; letter-spacing: 3px; }
+    header .sub { font-size: 12px; opacity: .75; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 20px; background: #efe9dc; border-bottom: 1px solid #e0d7c4; }
+    .toolbar button { padding: 4px 10px; border: 1px solid #d8d0c0; border-radius: 5px; background: #fff; cursor: pointer; font-size: 13px; color: #2c2620; }
+    .toolbar button:hover { background: #f3ede0; }
+    main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; padding: 16px 20px; }
+    @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+    h2 { font-size: 12px; margin: 0 0 6px; color: #7a6a52; text-transform: uppercase; letter-spacing: 1px; }
+    .editor-shell { background: #fff; border: 1px solid #e4dcc8; border-radius: 8px; padding: 8px 8px 0; }
+    /* ProseMirror 编辑区 */
+    #editor { min-height: 60vh; padding: 24px 32px; outline: none; }
+    #editor p { margin: .5em 0; line-height: 1.75; }
+    #editor blockquote { margin: .8em 0; padding: .2em 1em; border-left: 3px solid #c9b98f; color: #5c5244; background: #faf7ef; }
+    #editor pre { background: #2c2620; color: #efe9dc; padding: 12px 14px; border-radius: 6px; overflow: auto; }
+    #editor pre code { background: none; color: inherit; padding: 0; }
+    #editor code { background: #efe9dc; padding: 1px 5px; border-radius: 4px; font-size: .92em; }
+    #editor table { border-collapse: collapse; margin: .8em 0; }
+    #editor td { border: 1px solid #cfc4ab; padding: 6px 10px; min-width: 80px; }
+    #editor figure { margin: 1em 0; text-align: center; }
+    #editor figcaption { font-size: 12.5px; color: #7a6a52; padding: 4px 0; }
+    #editor aside.az-footnote { background: #f4efe2; border: 1px dashed #cfc4ab; border-radius: 6px; padding: 8px 14px; font-size: .92em; margin: .8em 0; }
+    #editor div.az-callout { border: 1px solid #e0d7c4; border-left-width: 4px; border-radius: 6px; padding: 10px 14px; margin: .8em 0; background: #fbf8f0; }
+    #editor div.az-callout--warning { border-left-color: #c98a2b; background: #fdf6e8; }
+    #editor div.az-callout--danger, #editor div.az-callout--error { border-left-color: #a33c2f; background: #fbeeea; }
+    #editor div.az-math { background: #f4efe2; border-radius: 6px; padding: 10px 14px; font-family: Cambria, Georgia, serif; text-align: center; margin: .8em 0; cursor: pointer; }
+    #editor code.az-inline-math { font-family: Cambria, Georgia, serif; background: #f4efe2; cursor: pointer; }
+    #editor .az-unknown { background: repeating-linear-gradient(45deg, #f7f1e4, #f7f1e4 8px, #f2ecdd 8px, #f2ecdd 16px); border: 1px dashed #b3a37f; border-radius: 6px; padding: 10px 14px; margin: .8em 0; color: #6b5636; font-size: .95em; }
+    #editor .az-unknown--inline { display: inline; padding: 0 4px; margin: 0 2px; }
+    #editor .az-asset-placeholder { display: inline-block; background: #efe9dc; border: 1px dashed #b3a37f; border-radius: 6px; padding: 14px 18px; color: #6b5636; font-size: .9em; margin: .4em 0; }
+    #editor .az-check { cursor: pointer; margin-right: 6px; user-select: none; }
+    #editor li[data-checked="true"]::before { content: "☑ "; cursor: pointer; }
+    #editor li[data-checked="false"]::before { content: "☐ "; cursor: pointer; }
+    #editor li[data-checked] { list-style: none; }
+    #editor .az-footnote-ref { color: #8c5a2b; cursor: default; }
+    #editor .az-mention { background: #e3ddf2; color: #55468a; border-radius: 4px; padding: 0 4px; }
+    #editor .az-cite { background: #dde8d5; color: #3d6b35; border-radius: 4px; padding: 0 4px; }
+    .bar { display: flex; gap: 8px; padding: 10px 4px; align-items: center; }
+    .bar button { padding: 8px 18px; border: 0; border-radius: 6px; background: #8c5a2b; color: #fff; cursor: pointer; font-size: 14px; }
+    .bar button.secondary { background: #5a6b52; }
+    .bar button:disabled { opacity: .5; cursor: wait; }
+    #message { flex: 1; padding: 8px 10px; border: 1px solid #d8d0c0; border-radius: 6px; font-size: 13px; }
+    #msg { font-size: 13px; white-space: pre-wrap; padding: 4px 0; }
+    .ok { color: #3d6b35; } .bad { color: #a33c2f; }
+    aside section { background: #fff; border: 1px solid #e4dcc8; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
+    ul { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.7; }
+    .tag { display: inline-block; padding: 0 6px; border-radius: 4px; font-size: 11px; background: #eee3cf; color: #6b5636; margin-right: 4px; }
+    .tag--human { background: #dde8d5; color: #3d6b35; }
+    .tag--ai { background: #e3ddf2; color: #55468a; }
+    .tag--importer { background: #e8e0cf; }
+    .detached { color: #a33c2f; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ALUDEL</h1>
+    <span class="sub">Azodoc 编辑器 · <span id="doc-path">…</span></span>
+    <span class="sub">当前修订: <span id="rev">—</span></span>
+  </header>
+  <div class="toolbar">
+    <button id="tb-para">正文</button>
+    <button id="tb-h1">H1</button>
+    <button id="tb-h2">H2</button>
+    <button id="tb-quote">引用</button>
+    <button id="tb-codeblock">代码块</button>
+    <button id="tb-math">∑ 数学</button>
+    <button id="tb-strong"><b>B</b></button>
+    <button id="tb-em"><i>I</i></button>
+    <button id="tb-underline"><u>U</u></button>
+    <button id="tb-strike"><s>S</s></button>
+    <button id="tb-code">&lt;/&gt;</button>
+    <button id="tb-link">🔗</button>
+    <button id="tb-undo">↩</button>
+    <button id="tb-redo">↪</button>
+  </div>
+  <main>
+    <section>
+      <div class="editor-shell"><div id="editor"></div></div>
+      <div class="bar">
+        <button id="save">保存（落链 author:human）</button>
+        <button id="verify" class="secondary">athanor verify</button>
+        <input id="message" placeholder="修订说明（可空）" />
+      </div>
+      <div id="msg"></div>
+    </section>
+    <aside>
+      <section><h2>修订历史</h2><ul id="history"></ul></section>
+      <section><h2>语义标注</h2><ul id="annotations"></ul></section>
+      <section><h2>未知内容 / 损失盘点</h2><ul id="loss"></ul></section>
+      <section><h2>容器警告</h2><ul id="warnings"></ul></section>
+    </aside>
+  </main>
+  <script>
+    // 模块级错误兜底（eval 期错误不会经过 boot 的 try/catch）
+    window.addEventListener("error", (e) => {
+      const m = document.getElementById("msg");
+      if (m) {
+        m.textContent = "脚本错误: " + (e.error?.message ?? e.message);
+        m.className = "bad";
+      }
+    });
+  </script>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

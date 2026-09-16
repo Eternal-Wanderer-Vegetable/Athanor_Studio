@@ -296,6 +296,7 @@
     },
     "hard_break": {
       "group": "inline",
+      "inline": true,
       "attrs": {
         "extra": {
           "default": null
@@ -304,6 +305,7 @@
     },
     "footnote_ref": {
       "group": "inline",
+      "inline": true,
       "attrs": {
         "id": {
           "default": ""
@@ -315,6 +317,7 @@
     },
     "inline_math": {
       "group": "inline",
+      "inline": true,
       "attrs": {
         "latex": {
           "default": ""
@@ -326,6 +329,7 @@
     },
     "inline_image": {
       "group": "inline",
+      "inline": true,
       "attrs": {
         "asset": {
           "default": ""
@@ -340,6 +344,7 @@
     },
     "mention": {
       "group": "inline",
+      "inline": true,
       "attrs": {
         "target": {
           "default": ""
@@ -351,6 +356,7 @@
     },
     "cite": {
       "group": "inline",
+      "inline": true,
       "attrs": {
         "key": {
           "default": ""
@@ -362,6 +368,7 @@
     },
     "unknown_span": {
       "group": "inline",
+      "inline": true,
       "content": "inline*",
       "attrs": {
         "origin": {

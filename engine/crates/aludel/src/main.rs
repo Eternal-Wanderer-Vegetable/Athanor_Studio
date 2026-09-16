@@ -29,7 +29,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 
-use aludel::{api, http, INDEX_HTML};
+use aludel::{api, http};
 
 fn main() {
     let mut doc: Option<PathBuf> = None;
@@ -78,7 +78,6 @@ fn main() {
     }
 
     let handler_app = Arc::clone(&app);
-    let _ = INDEX_HTML; // 由 api::route 使用；此处仅确保链接
     http::serve(listener, Arc::new(move |req| api::route(&handler_app, req)));
 }
 

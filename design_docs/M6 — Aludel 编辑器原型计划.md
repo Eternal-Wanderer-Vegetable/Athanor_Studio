@@ -1,9 +1,9 @@
 # M6 — Aludel 编辑器原型：RFC 与执行计划
 
-> **Status:** **M6.1 + M6.2 已交付**（2026-09-16；`azodoc-pm` 19 项测试、`aludel` 7 项测试，
-> 全仓 114 测试绿）。本文存档自 Future Work §A1 的重启规划，含完整 RFC、
-> Prima ↔ ProseMirror 映射表初版与分阶段计划；**后续修订直接改本文**。
-> **下一阶段：** M6.3（ProseMirror 正式前端）。
+> **Status:** **M6.1 + M6.2 + M6.3 已交付**（2026-09-16；azodoc-pm 19 项、aludel 7 项
+> 测试，全仓 114 测试绿；编辑器经浏览器实测）。本文存档自 Future Work §A1 的重启
+> 规划，含完整 RFC、Prima ↔ ProseMirror 映射表初版与分阶段计划；**后续修订直接改本文**。
+> **下一阶段：** M6.4（验收打磨与文档收尾）。
 > **上游依据:** 《Azodoc v0.1 — 落地方案》§9 M6 行 + 《Future Work — 可选项与后续计划》§A1。
 > **基线:** M0–M5 + C7/A2/B1 已交付，CI 双平台，全仓 88 测试绿。
 
@@ -139,6 +139,9 @@ unknown 块损失摘要——修订层/语义层/损失报告第一次面向真�
 5. **嵌套 span ↔ flat marks**：load 展开；save 按 rank 重建嵌套（见 4.3）。
 6. **text 合并**：相邻同 marks 文本合并为单节点/单 span（两侧同规则，规范形）。
 7. **未知内容**：`unknown` 块/span → 只读 PM 节点（UI 层禁编辑），payload_ref 等原样。
+8. **`inline: true` 标志**：生成器为全部 group=inline 的节点（text 除外，PM 特判）
+   显式写入 `inline: true`——PM 判定行内性的标准机制，缺失时 `inline*` 内容表达式
+   直接拒绝这些节点（"Mixing inline and block content"）。
 
 ### 4.2 块节点映射（PM 名 ← Prima type）
 
@@ -282,13 +285,32 @@ M2 语料（md/html × basic/lossy）往返恒等（或幂等 + 归一化说明�
 >   原文件无损；HTTP 栈全链路（静态页/open/save/404/413）；手动 curl 冒烟通过。
 > - 全仓 114 测试绿，clippy/fmt 清零。
 
-### M6.3 — ProseMirror 前端原型（约 1–1.5 周）
+### M6.3 — ProseMirror 前端原型（约 1–1.5 周）【已交付】
 
 `aludel/editor/`（vite + TS + 裸 PM，不用 TipTap），dist 嵌入二进制。
 v1 可编辑：段落/标题/列表（含任务）/引用/代码块/基础 marks/数学源码编辑。
 v1 只读：unknown 卡片、figure/table/callout/footnote 最简展示。
 UI：中央编辑器 + 右侧栏（修订历史 author 徽标、标注列表 detached 高亮）+
 保存 toast（"未变 N · 重锚 N · 迁移 N · 失配 N"）+ 四段式错误页。
+
+> **实施记录（2026-09-16，全部达成）**
+> - `engine/crates/aludel/editor/`：vite + TS，构建产物为**单个自包含
+>   `dist/index.html`**（vite-plugin-singlefile，JS/CSS 内联，229 KB），由
+>   `aludel` 二进制 `include_str!` 嵌入；**dist 入库、node_modules 排除**，CI
+>   （纯 Rust）无需 Node。结构唯一事实源不变：`schema.ts` 直接 import
+>   `azodoc-pm/gen/aludel-schema.json`；本文件只手写 DOM 呈现层（toDOM/parseDOM）。
+> - v1 可编辑：正文/标题 H1–H2/列表（任务复选框点击切换 checked）/引用/代码块/
+>   strong/em/underline/strike/inline code/link（工具栏 + 快捷键）；数学以 LaTeX
+>   源码呈现、双击编辑。只读呈现：unknown 块/span 卡片（contenteditable=false）、
+>   figure（caption 只读展示）、callout/footnote/embed/表格最简展示；
+>   asset:// 占位框（真实资源解析属表现层）。
+> - **生成物修正一处**：行内节点补 `inline: true`（PM 判定行内性的标准机制，
+>   schema-basic 同款）——缺失时 PM 报 "Mixing inline and block content"；
+>   已固化进 `gen.rs` 并再生黄金文件（映射表 §4 增补此约定）。
+> - 浏览器实测（IAB）：语料文档完整渲染（17 段/4 标题/3 列表/2 任务项/数学）；
+>   编辑器内输入 → 保存 → toast "已落链 rev_…（author:human）"、侧栏历史即时
+>   出现 human 修订；文件经 `athanor verify` 通过、编辑文本确认写入 content.json。
+> - 全仓 114 测试绿（Rust 侧），clippy/fmt 清零。
 
 ### M6.4 — 验收打磨与 CI（约 3–5 天）
 

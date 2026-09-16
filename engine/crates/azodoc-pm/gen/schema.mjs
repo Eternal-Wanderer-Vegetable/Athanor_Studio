@@ -301,6 +301,7 @@ export const schemaSpec = {
     },
     "hard_break": {
       "group": "inline",
+      "inline": true,
       "attrs": {
         "extra": {
           "default": null
@@ -309,6 +310,7 @@ export const schemaSpec = {
     },
     "footnote_ref": {
       "group": "inline",
+      "inline": true,
       "attrs": {
         "id": {
           "default": ""
@@ -320,6 +322,7 @@ export const schemaSpec = {
     },
     "inline_math": {
       "group": "inline",
+      "inline": true,
       "attrs": {
         "latex": {
           "default": ""
@@ -331,6 +334,7 @@ export const schemaSpec = {
     },
     "inline_image": {
       "group": "inline",
+      "inline": true,
       "attrs": {
         "asset": {
           "default": ""
@@ -345,6 +349,7 @@ export const schemaSpec = {
     },
     "mention": {
       "group": "inline",
+      "inline": true,
       "attrs": {
         "target": {
           "default": ""
@@ -356,6 +361,7 @@ export const schemaSpec = {
     },
     "cite": {
       "group": "inline",
+      "inline": true,
       "attrs": {
         "key": {
           "default": ""
@@ -367,6 +373,7 @@ export const schemaSpec = {
     },
     "unknown_span": {
       "group": "inline",
+      "inline": true,
       "content": "inline*",
       "attrs": {
         "origin": {
