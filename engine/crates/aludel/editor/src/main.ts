@@ -24,7 +24,7 @@ import { keymap } from "prosemirror-keymap";
 import { history, undo, redo } from "prosemirror-history";
 import { schema } from "./schema";
 import "prosemirror-view/style/prosemirror.css";
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 
 interface DocResponse {
   path: string;
@@ -47,11 +47,20 @@ interface DocResponse {
   };
 }
 
+interface JobSnapshot {
+  id: number;
+  phase: string;
+  progress: number;
+  result?: { output?: string; document?: string; report?: { summary?: { loss?: Record<string, number> } } };
+  error?: { code: string; message: string };
+}
+
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 
 let view: EditorView;
 let currentDoc: DocResponse | null = null;
 let dirty = false;
+let activeJob: number | null = null;
 const tauriMode = "__TAURI_INTERNALS__" in window;
 
 // ---------------------------------------------------------------- 装配
@@ -116,6 +125,10 @@ function mountDocument(d: DocResponse): void {
   toolbar();
   $("save").addEventListener("click", () => void save());
   $("verify").addEventListener("click", () => void verify());
+  $("import").addEventListener("click", () => void runJob("import"));
+  $("export").addEventListener("click", () => void runJob("export"));
+  $("publish").addEventListener("click", () => void runJob("publish"));
+  $("cancel-job").addEventListener("click", () => void cancelJob());
 }
 
 // ---------------------------------------------------------------- 侧栏
@@ -202,6 +215,53 @@ function setMsg(text: string, ok: boolean): void {
   const el = $("msg");
   el.textContent = text;
   el.className = ok ? "ok" : "bad";
+}
+
+function renderJob(snapshot: JobSnapshot): void {
+  activeJob = ["succeeded", "failed", "cancelled"].includes(snapshot.phase) ? null : snapshot.id;
+  const cancel = $("cancel-job") as HTMLButtonElement | null;
+  if (cancel) cancel.disabled = activeJob === null;
+  if (snapshot.error) {
+    setMsg(`任务失败: ${snapshot.error.message}`, false);
+    return;
+  }
+  const loss = snapshot.result?.report?.summary?.loss;
+  const lossText = loss ? ` · 损失 ${Object.values(loss).reduce((a, b) => a + b, 0)} 项` : "";
+  const labels: Record<string, string> = { queued: "排队中", running: "运行中", cancelling: "取消中", committing: "提交结果中", succeeded: "已完成", cancelled: "已取消", failed: "失败" };
+  setMsg(`任务 #${snapshot.id} ${labels[snapshot.phase] ?? snapshot.phase} ${snapshot.progress}%${lossText}`, snapshot.phase !== "failed");
+  if (snapshot.phase === "succeeded" && snapshot.result?.document && snapshot.result.document !== currentDoc?.path) {
+    void command<DocResponse>("open_document", { path: snapshot.result.document }).then(mountDocument);
+  }
+}
+
+async function runJob(kind: "import" | "export" | "publish"): Promise<void> {
+  if (!tauriMode || activeJob !== null) return;
+  const input = kind === "import" ? window.prompt("导入文件路径：") : currentDoc?.path;
+  if (!input) return;
+  const output = window.prompt(kind === "import" ? "Azodoc 输出路径：" : kind === "publish" ? "PDF 输出路径：" : "导出文件路径：");
+  if (!output) return;
+  const channel = new Channel<JobSnapshot>();
+  channel.onmessage = (snapshot) => renderJob(snapshot);
+  const request = kind === "import"
+    ? { kind, input, output, reader: "auto" }
+    : kind === "export"
+      ? { kind, input, output, format: "markdown" }
+      : { kind, input, output, noPaged: false };
+  try {
+    activeJob = await command<number>("run_job", { request, onUpdate: channel });
+    setMsg(`任务 #${activeJob} 已排队`, true);
+  } catch (e) {
+    setMsg(`任务无法启动: ${e instanceof Error ? e.message : String(e)}`, false);
+  }
+}
+
+async function cancelJob(): Promise<void> {
+  if (activeJob === null) return;
+  try {
+    await command<boolean>("cancel_job", { jobId: activeJob });
+  } catch (e) {
+    setMsg(`取消失败: ${e instanceof Error ? e.message : String(e)}`, false);
+  }
 }
 
 async function save(): Promise<void> {

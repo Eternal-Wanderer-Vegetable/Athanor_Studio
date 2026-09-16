@@ -89,9 +89,14 @@ pub fn open_document(
 #[tauri::command]
 pub fn save_document(
     state: tauri::State<'_, StudioState>,
+    jobs: tauri::State<'_, crate::jobs::JobManager>,
     session_id: String,
     body: Value,
 ) -> Result<Value, CommandError> {
+    let _commit = jobs.commit_gate.lock().map_err(|_| CommandError {
+        code: "state_poisoned",
+        message: "studio commit state is unavailable".into(),
+    })?;
     get_session(&state, &session_id)?
         .save(&body)
         .map_err(CommandError::from)
