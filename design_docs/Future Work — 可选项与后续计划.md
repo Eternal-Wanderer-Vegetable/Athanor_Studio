@@ -91,6 +91,12 @@
 
 ### B2. DOCX 原生 OOXML 读取 RFC（摆脱 Pandoc）
 
+> **状态（2026-09-16 更新）：已立项，RFC 存档并开始实施。** 见
+> 《B2 — DOCX 原生 OOXML 读取：RFC 与执行计划》：`azodoc-docx::ooxml`
+> 原生读取模块 + CLI `--reader auto|native|pandoc`；样式→theme、批注→
+> annotations、tracked changes 终稿视图 + 原件 preserved；Pandoc 保留为
+> 导出路径与导入 fallback（converter 名区分 `athanor-docx` / `athanor-docx-pandoc`）。
+
 - **背景**：M4 走 Pandoc 桥（质量好但有外部依赖 + AST 有损：样式/批注/tracked
   changes/页眉页脚被丢）。落地方案 §8.1 已把"原生读取"列为 v0.3+ RFC 议题。
 - **方案**：直接解析 OOXML（`word/document.xml` + relationships + styles.xml）。
