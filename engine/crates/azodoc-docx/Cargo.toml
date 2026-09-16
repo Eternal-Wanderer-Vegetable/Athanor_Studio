@@ -11,4 +11,8 @@ azodoc-model = { path = "../azodoc-model" }
 azodoc-convert = { path = "../azodoc-convert" }
 serde_json.workspace = true
 zip.workspace = true
+quick-xml.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+jsonschema = "0.56"

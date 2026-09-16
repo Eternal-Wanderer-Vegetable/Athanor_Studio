@@ -1,0 +1,13 @@
+docx_headers|preserved_raw|preserved
+docx_footers|preserved_raw|preserved
+docx_ole_object|preserved_raw|preserved_quarantined
+docx_tracked_changes|partial|degraded
+docx_bookmark|partial|dropped
+docx_endnotes|partial|degraded
+docx_field|partial|degraded
+docx_internal_link|partial|degraded
+docx_omml|degraded|degraded
+docx_page_break|partial|degraded
+docx_run_props|partial|dropped
+docx_sdt|partial|degraded
+docx_tab|partial|degraded

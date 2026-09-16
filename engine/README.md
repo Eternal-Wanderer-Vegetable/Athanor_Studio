@@ -41,7 +41,7 @@ PATH → Windows 标准安装位置（Windows 自带 Edge 即可）→ `tools/`�
 ```bash
 cd engine
 cargo build            # 调试构建；产物 target/debug/athanor.exe
-cargo test             # 全部测试（M1–M5，共 77 项；DOCX e2e 需 Pandoc、publish e2e 需浏览器，缺席自动跳过）
+cargo test             # 全部测试（M1–M6 + B2，共 169 项；DOCX Pandoc e2e 需 Pandoc、publish e2e 需浏览器，缺席自动跳过）
 cargo fmt && cargo clippy   # 提交前建议
 
 # 重新生成 TXT 黄金文件（有意变更 TXT 输出时）
@@ -115,6 +115,29 @@ checkout 状态提示）与标注新鲜度检查（目标块存在性 + 引用�
 表格含合并单元格（colSpan/rowSpan 保留）、脚注 Note→footnote、
 数学 Math→inline_math/math_block、tracked changes 以 `--track-changes=all`
 读入（标记为 span class，降级提升）。
+
+## B2 原生 OOXML 读取（`athanor import --reader native|auto|pandoc`）
+
+`azodoc-docx::ooxml` 进程内读取器（zip + quick-xml，无外部二进制——GUI/A3 的
+前置能力）。`auto`（默认）原生优先，硬失败回落 Pandoc 桥并在报告记录
+`docx_reader_fallback`；converter 名区分 `athanor-docx`（原生）与
+`athanor-docx-pandoc`（桥）。映射要点：
+
+- 样式 → `presentation/theme.json`（slug 规则见 RFC；块挂 `style` 软引用；
+  `sectPr` → `defaults.page`）——首个表现层写入器；
+- 批注 → `semantics/annotations.json`（text_quote 锚定，跨块降级 block）——
+  首个语义层写入器；
+- tracked changes → 终稿视图 + 原始 document.xml 整件 preserved + 聚合事件；
+- 页眉/页脚/自定义 XML/未知部件 → `preserved/docx/` 整件 + 报告（终结静默丢弃）；
+  OLE/宏 → `preserved_quarantined`；OMML 公式 → preserved + Degraded；
+- 表格 gridSpan/vMerge（续标记合并计数）/tblHeader 全保留；编号多级列表经
+  list_item 嵌套表达；
+- 小损失按 feature 聚合为单条事件（detail 带计数与样本）。
+
+证据：azodoc-docx `b2_ooxml`（映射表逐行断言 + annotations/theme schema 校验）、
+`b2_golden`（corpus/docx 黄金比对，AZODOC_WRITE_GOLDEN 重新生成；夹具由
+`tools/docx_fixtures/generate.py` 确定性生成）、athanor-cli `b2_tests`
+（导入 → verify 通过 / 层装配 / converter 名 / pandoc 回退）。
 
 ## M5 验收对照（落地方案 §9）
 

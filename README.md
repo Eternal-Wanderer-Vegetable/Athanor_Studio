@@ -53,7 +53,7 @@ front end + save-with-commit pipeline: editing sessions produce
 `author: human` revisions and annotations relocate automatically), **A2** — an
 AI pipeline example (LLM → annotations & revisions with auditable `ai:*`
 authorship) and **B1** — Paged.js/CDP publishing (page-number footers, running
-headers, race-free pagination). **114 tests passing.** CI runs rustfmt +
+headers, race-free pagination). **169 tests passing.** CI runs rustfmt +
 clippy + the full test matrix on Ubuntu & Windows via GitHub Actions.
 Remaining directions are archived in the
 [future-work document](design_docs/Future%20Work%20—%20可选项与后续计划.md).
@@ -157,7 +157,7 @@ newer file loses nothing.
 
 | Path | What |
 |---|---|
-| [`engine/`](engine/) | Athanor engine — Rust workspace (10 crates, 114 tests) |
+| [`engine/`](engine/) | Athanor engine — Rust workspace (10 crates, 169 tests) |
 | [`spec/`](spec/) | Azodoc v1.0 specifications (container, package, model, loss) + JSON Schemas + golden fixtures |
 | [`corpus/`](corpus/) | Test corpus, golden TXT exports, lossy-feature fixtures |
 | [`design_docs/`](design_docs/) | Design drafts, the implementation plan, and the archived future-work roadmap |
@@ -171,7 +171,7 @@ Engine crates: `azodoc-model` (Prima types + validation) ·
 `athanor-cli` · `aludel` (editor prototype: local server + web front end).
 
 ```bash
-cd engine && cargo test    # 114 tests; DOCX/PDF e2e auto-skip if tools are absent
+cd engine && cargo test    # 169 tests; DOCX/PDF e2e auto-skip if tools are absent
 ```
 
 ## Documentation

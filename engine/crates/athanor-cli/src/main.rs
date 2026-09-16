@@ -15,7 +15,7 @@
 
 //! athanor — Azodoc 引擎命令行（薄壳；实现在 lib.rs）。
 
-use athanor_cli::{cmd_import, cmd_info, cmd_new, cmd_recover, cmd_transmute, cmd_upgrade};
+use athanor_cli::{cmd_info, cmd_new, cmd_recover, cmd_transmute, cmd_upgrade};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -50,9 +50,9 @@ enum Command {
         #[arg(short, long)]
         out: PathBuf,
     },
-    /// 导入 Markdown / HTML 生成 .azodoc（不覆盖已有文件）
+    /// 导入 Markdown / HTML / DOCX 生成 .azodoc（不覆盖已有文件）
     Import {
-        /// 输入文件（.md / .html）
+        /// 输入文件（.md / .html / .docx）
         input: PathBuf,
         /// 目标 .azodoc 路径
         #[arg(short, long)]
@@ -69,6 +69,9 @@ enum Command {
         /// 存在任何损失时以退出码 3 结束
         #[arg(long)]
         strict_loss: bool,
+        /// DOCX 读取路径：auto（原生优先，失败回落 Pandoc）/ native / pandoc
+        #[arg(long, default_value = "auto")]
+        reader: String,
     },
     /// 导出为 markdown / txt / html（默认刷新容器内兼容缓存）
     Transmute {
@@ -174,13 +177,15 @@ fn main() {
             lang,
             report,
             strict_loss,
-        } => cmd_import(
+            reader,
+        } => athanor_cli::cmd_import_reader(
             &input,
             &out,
             format.as_deref(),
             &lang,
             report.as_deref(),
             strict_loss,
+            &reader,
         ),
         Command::Transmute {
             path,

@@ -99,7 +99,7 @@
 | 字段 | 语义 |
 |---|---|
 | `id` | `iss_` + ULID |
-| `feature` | 特性 token（封闭注册起步：`inline_html`、`html_comment`、`active_content`、`math_export`、`merged_cell`、`footnote`、`front_matter_key`、`style_attribute`…；未知 token 按 R2 保留） |
+| `feature` | 特性 token（封闭注册起步：`inline_html`、`html_comment`、`active_content`、`math_export`、`merged_cell`、`footnote`、`front_matter_key`、`style_attribute`、`docx_headers`、`docx_footers`、`docx_comments`、`docx_tracked_changes`、`docx_omml`、`docx_field`、`docx_sdt`、`docx_alternate_content`、`docx_nested_table`（预留）、`docx_vml`、`docx_run_props`、`docx_paragraph_props`、`docx_bookmark`、`docx_tab`、`docx_page_break`、`docx_internal_link`、`docx_floating_image`、`docx_endnotes`、`docx_numbering_edge`、`docx_media_missing`、`docx_footnote_missing`、`docx_table_edge`、`docx_ole_object`、`docx_customxml`、`docx_unknown_part`、`docx_reader_fallback`…；未知 token 按 R2 保留） |
 | `loss_class` | §1 五级之一（小写） |
 | `location` | import：`{"source_line": n, "source_column": n?}`；export：`{"block": "blk_…"}`；均可带 `context: "<节选文本>"` |
 | `action` | `"preserved"` / `"preserved_quarantined"` / `"removed"` / `"degraded"` / `"dropped"` |
@@ -138,6 +138,7 @@
 ### 5.4 DOCX / PDF（M4/M5 实现，规范现在即生效）
 
 - 同样走 §1 判定流程；占位规则：DOCX 占位段落（样式 `AzodocUnsupported`），PDF 占位框；
+- 原生 OOXML 读取（B2，`--reader native/auto`）：无法建模的部件整件 `preserved/docx/`（页眉/页脚/自定义 XML/未知部件记 `preserved`；OLE/宏记 `preserved_quarantined`）；小损失按 feature **聚合报告**（detail 带计数，issues 与计数仍逐条一致）；tracked changes 按终稿视图导入并整件保留原始 document.xml；converter 名区分 `athanor-docx`（原生）/ `athanor-docx-pandoc`（桥）；
 - publication 管线（PDF）的确定性要求见 azodoc-package.md 与落地方案 §8.2。
 
 ---

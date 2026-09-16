@@ -1,0 +1,220 @@
+{
+  "schema_version": "1.0",
+  "content": [
+    {
+      "id": "sec_V0000000000000000000000000",
+      "type": "section",
+      "children": [
+        {
+          "id": "blk_10000000000000000000000000",
+          "type": "heading",
+          "content": [
+            {
+              "type": "text",
+              "text": "有损特性示例"
+            }
+          ],
+          "level": 1
+        },
+        {
+          "id": "blk_20000000000000000000000000",
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "新增文字"
+            }
+          ]
+        },
+        {
+          "id": "blk_30000000000000000000000000",
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "被批注的句子。"
+            }
+          ]
+        },
+        {
+          "id": "blk_50000000000000000000000000",
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "高亮上标"
+            }
+          ]
+        },
+        {
+          "id": "blk_70000000000000000000000000",
+          "type": "paragraph",
+          "content": []
+        },
+        {
+          "id": "blk_60000000000000000000000000",
+          "type": "unknown",
+          "origin": "docx",
+          "loss_class": "preserved_raw",
+          "summary": "OMML 展示公式（未转 LaTeX）",
+          "payload_ref": "preserved/docx/part-0004.xml",
+          "content": []
+        },
+        {
+          "id": "blk_80000000000000000000000000",
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "目录占位"
+            }
+          ]
+        },
+        {
+          "id": "blk_90000000000000000000000000",
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "控件文本"
+            }
+          ]
+        },
+        {
+          "id": "blk_B0000000000000000000000000",
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "列 表"
+            },
+            {
+              "type": "hard_break"
+            },
+            {
+              "type": "text",
+              "text": "换行后"
+            }
+          ]
+        },
+        {
+          "id": "blk_A0000000000000000000000000",
+          "type": "horizontal_rule"
+        },
+        {
+          "id": "blk_Q0000000000000000000000000",
+          "type": "table",
+          "header_row": false,
+          "columns": [
+            {
+              "id": "col_G0000000000000000000000000",
+              "name": ""
+            },
+            {
+              "id": "col_H0000000000000000000000000",
+              "name": ""
+            }
+          ],
+          "rows": [
+            {
+              "id": "row_M0000000000000000000000000",
+              "cells": [
+                {
+                  "id": "cel_J0000000000000000000000000",
+                  "column": 0,
+                  "children": [
+                    {
+                      "id": "blk_C0000000000000000000000000",
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "跨行"
+                        }
+                      ]
+                    }
+                  ],
+                  "rowSpan": 2
+                },
+                {
+                  "id": "cel_K0000000000000000000000000",
+                  "column": 1,
+                  "children": [
+                    {
+                      "id": "blk_D0000000000000000000000000",
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "R1C2"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "row_P0000000000000000000000000",
+              "cells": [
+                {
+                  "id": "cel_N0000000000000000000000000",
+                  "column": 1,
+                  "children": [
+                    {
+                      "id": "blk_F0000000000000000000000000",
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "R2C2"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "blk_T0000000000000000000000000",
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "footnote_ref",
+              "id": "blk_S0000000000000000000000000"
+            },
+            {
+              "type": "link",
+              "url": "#_Toc9",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "回到开头"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "blk_S0000000000000000000000000",
+          "type": "footnote",
+          "label": "1",
+          "children": [
+            {
+              "id": "blk_R0000000000000000000000000",
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "尾注内容。"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

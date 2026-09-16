@@ -82,6 +82,8 @@ pub fn import(md: &str, job: &mut ImportJob) -> ImportOutput {
         title,
         language,
         doc_extra,
+        annotations: Vec::new(),
+        theme: None,
         log,
     }
 }

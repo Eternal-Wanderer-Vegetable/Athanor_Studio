@@ -193,6 +193,8 @@ dependencies = [
  "azodoc-container",
  "azodoc-convert",
  "azodoc-model",
+ "jsonschema",
+ "quick-xml",
  "serde_json",
  "thiserror",
  "zip",

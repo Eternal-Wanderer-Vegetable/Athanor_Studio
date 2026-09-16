@@ -1,0 +1,385 @@
+{
+  "schema_version": "1.0",
+  "content": [
+    {
+      "id": "sec_C1000000000000000000000000",
+      "type": "section",
+      "children": [
+        {
+          "id": "blk_10000000000000000000000000",
+          "type": "heading",
+          "content": [
+            {
+              "type": "text",
+              "text": "炼金术导论"
+            }
+          ],
+          "level": 1
+        },
+        {
+          "id": "blk_20000000000000000000000000",
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "普通文本与"
+            },
+            {
+              "type": "strong",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "粗体"
+                }
+              ]
+            },
+            {
+              "type": "em",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "斜体"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "混合段落。"
+            }
+          ]
+        },
+        {
+          "id": "blk_50000000000000000000000000",
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "参见"
+            },
+            {
+              "type": "link",
+              "url": "https://athanor.example/",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Athanor 主页"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "。"
+            },
+            {
+              "type": "footnote_ref",
+              "id": "blk_40000000000000000000000000"
+            }
+          ]
+        },
+        {
+          "id": "blk_80000000000000000000000000",
+          "type": "list",
+          "style": "bullet",
+          "items": [
+            {
+              "id": "li_70000000000000000000000000",
+              "type": "list_item",
+              "children": [
+                {
+                  "id": "blk_60000000000000000000000000",
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "项目甲"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "li_A0000000000000000000000000",
+              "type": "list_item",
+              "children": [
+                {
+                  "id": "blk_90000000000000000000000000",
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "项目乙"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "blk_D0000000000000000000000000",
+          "type": "list",
+          "style": "ordered",
+          "items": [
+            {
+              "id": "li_C0000000000000000000000000",
+              "type": "list_item",
+              "children": [
+                {
+                  "id": "blk_B0000000000000000000000000",
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "第一步"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "li_F0000000000000000000000000",
+              "type": "list_item",
+              "children": [
+                {
+                  "id": "blk_E0000000000000000000000000",
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "第二步"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "start": 3
+        },
+        {
+          "id": "blk_81000000000000000000000000",
+          "type": "table",
+          "header_row": true,
+          "columns": [
+            {
+              "id": "col_S0000000000000000000000000",
+              "name": "元素"
+            },
+            {
+              "id": "col_T0000000000000000000000000",
+              "name": "符号"
+            },
+            {
+              "id": "col_V0000000000000000000000000",
+              "name": "性质"
+            }
+          ],
+          "rows": [
+            {
+              "id": "row_Z0000000000000000000000000",
+              "cells": [
+                {
+                  "id": "cel_W0000000000000000000000000",
+                  "column": 0,
+                  "children": [
+                    {
+                      "id": "blk_G0000000000000000000000000",
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "元素"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "cel_X0000000000000000000000000",
+                  "column": 1,
+                  "children": [
+                    {
+                      "id": "blk_H0000000000000000000000000",
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "符号"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "cel_Y0000000000000000000000000",
+                  "column": 2,
+                  "children": [
+                    {
+                      "id": "blk_J0000000000000000000000000",
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "性质"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "row_31000000000000000000000000",
+              "cells": [
+                {
+                  "id": "cel_01000000000000000000000000",
+                  "column": 0,
+                  "children": [
+                    {
+                      "id": "blk_K0000000000000000000000000",
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "金"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "cel_11000000000000000000000000",
+                  "column": 1,
+                  "children": [
+                    {
+                      "id": "blk_M0000000000000000000000000",
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Au"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "cel_21000000000000000000000000",
+                  "column": 2,
+                  "children": [
+                    {
+                      "id": "blk_N0000000000000000000000000",
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "贵重金属"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "row_71000000000000000000000000",
+              "cells": [
+                {
+                  "id": "cel_41000000000000000000000000",
+                  "column": 0,
+                  "children": [
+                    {
+                      "id": "blk_P0000000000000000000000000",
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "银"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "cel_51000000000000000000000000",
+                  "column": 1,
+                  "children": [
+                    {
+                      "id": "blk_Q0000000000000000000000000",
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Ag"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "cel_61000000000000000000000000",
+                  "column": 2,
+                  "children": [
+                    {
+                      "id": "blk_R0000000000000000000000000",
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "贵重金属"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "sec_B1000000000000000000000000",
+          "type": "section",
+          "children": [
+            {
+              "id": "blk_91000000000000000000000000",
+              "type": "heading",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "第二章"
+                }
+              ],
+              "level": 2
+            },
+            {
+              "id": "blk_A1000000000000000000000000",
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "结尾段落。"
+                }
+              ]
+            },
+            {
+              "id": "blk_40000000000000000000000000",
+              "type": "footnote",
+              "label": "1",
+              "children": [
+                {
+                  "id": "blk_30000000000000000000000000",
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "脚注：出自《炼金术初步》。"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

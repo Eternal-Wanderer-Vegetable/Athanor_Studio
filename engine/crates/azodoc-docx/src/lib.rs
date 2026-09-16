@@ -13,16 +13,23 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-//! azodoc-docx — DOCX 读写器（Pandoc 子进程桥接）。
+//! azodoc-docx — DOCX 读写器。
 //!
-//! 许可隔离：以独立子进程调用 GPL 工具 Pandoc，经标准流交换通用 JSON，
-//! 不链接、不分发其代码，核心许可（AGPL-3.0-only）不受传染。
-//! Pandoc 为运行时可选依赖：未安装时返回带安装指引的友好错误。
+//! 读取有两条路径（RFC B2）：
+//! - 原生 OOXML 读取（[`ooxml::import_native`]）：进程内解析
+//!   document.xml/relationships/styles.xml，样式→theme、批注→annotations、
+//!   tracked changes→终稿视图+原件 preserved；无外部依赖。
+//! - Pandoc 子进程桥（[`import`]）：GPL 隔离（进程边界 + 通用 JSON 流），
+//!   运行时可选，未安装时返回带安装指引的友好错误。
+//!
+//! 统一入口 [`ooxml::import_docx`]：`--reader auto|native|pandoc`，
+//! auto = 原生优先、硬失败回落 Pandoc 并在报告记录回落事件。
 
 pub mod ast_in;
 pub mod ast_out;
 pub mod bridge;
 pub mod inventory;
+pub mod ooxml;
 
 use azodoc_convert::{ExportDoc, ImportJob, ImportOutput, LossClass, LossLog};
 use std::path::{Path, PathBuf};
@@ -79,6 +86,8 @@ pub fn import(docx: &[u8], job: &mut ImportJob) -> Result<ImportOutput, bridge::
             title,
             language: None,
             doc_extra: Default::default(),
+            annotations: Vec::new(),
+            theme: None,
             log,
         })
     })();

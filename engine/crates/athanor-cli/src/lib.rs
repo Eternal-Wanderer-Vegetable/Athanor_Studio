@@ -285,6 +285,18 @@ pub fn cmd_import(
     report_out: Option<&Path>,
     strict_loss: bool,
 ) -> i32 {
+    cmd_import_reader(input, out, format, lang, report_out, strict_loss, "auto")
+}
+
+pub fn cmd_import_reader(
+    input: &Path,
+    out: &Path,
+    format: Option<&str>,
+    lang: &str,
+    report_out: Option<&Path>,
+    strict_loss: bool,
+    reader: &str,
+) -> i32 {
     if out.exists() {
         eprintln!(
             "错误：目标文件已存在，athanor import 不覆盖已有文件: {}",
@@ -306,17 +318,26 @@ pub fn cmd_import(
     let text = String::from_utf8_lossy(&data).to_string();
 
     let mut job = ImportJob::new(input.parent().map(Path::to_path_buf));
+    // docx 读取路径（B2）：报告与落链的 converter 名随路径区分
+    let mut docx_read_path: Option<azodoc_docx::ooxml::DocxReadPath> = None;
     let output = match fmt.as_str() {
         "markdown" => azodoc_md::import(&text, &mut job),
         "html" => azodoc_html::import(&text, &mut job),
-        "docx" => match azodoc_docx::import(&data, &mut job) {
-            Ok(r) => r,
-            Err(e) => {
-                eprintln!("{}", e.friendly());
+        "docx" => match azodoc_docx::ooxml::import_docx(&data, &mut job, reader) {
+            Ok((r, path)) => {
+                docx_read_path = Some(path);
+                r
+            }
+            Err(friendly) => {
+                eprintln!("{friendly}");
                 return 1;
             }
         },
         _ => unreachable!(),
+    };
+    let docx_converter: String = match &docx_read_path {
+        Some(p) => p.converter_name().to_string(),
+        None => String::new(),
     };
     let source_sha = sha256_hex(&data);
 
@@ -408,6 +429,7 @@ pub fn cmd_import(
             revision: None,
             converter: match fmt.as_str() {
                 "markdown" => azodoc_md::converter_name(),
+                "docx" => docx_converter.as_str(),
                 _ => azodoc_html::converter_name(),
             },
         },
@@ -432,7 +454,24 @@ pub fn cmd_import(
             }
         }
     }
-    let manifest = json!({
+    // 语义层 / 表现层（B2：DOCX 批注 → annotations；DOCX 样式 → theme）
+    let mut extra_layers: Vec<(String, String, Vec<u8>)> = Vec::new();
+    if !output.annotations.is_empty() {
+        let ann = json!({ "schema_version": "1.0", "annotations": output.annotations });
+        extra_layers.push((
+            "semantics".to_string(),
+            "semantics/annotations.json".to_string(),
+            pretty(&ann),
+        ));
+    }
+    if let Some(theme) = &output.theme {
+        extra_layers.push((
+            "presentation".to_string(),
+            "presentation/theme.json".to_string(),
+            pretty(theme),
+        ));
+    }
+    let mut manifest = json!({
         "azodoc": {
             "format_version": "1.0",
             "container_profile": "prefixed",
@@ -447,6 +486,9 @@ pub fn cmd_import(
         "compatibility": compat_entries,
         "reports": [ { "path": report_path, "kind": "conversion", "sha256": sha256_hex(&report_bytes) } ],
     });
+    for (layer, path, bytes) in &extra_layers {
+        manifest["layers"][layer.as_str()] = json!({ "path": path, "sha256": sha256_hex(bytes) });
+    }
     let manifest_bytes = pretty(&manifest);
 
     // 打包
@@ -462,6 +504,9 @@ pub fn cmd_import(
     }
     for (p, bytes) in compat_files {
         entries.push((p, bytes, false));
+    }
+    for (_, p, bytes) in &extra_layers {
+        entries.push((p.clone(), bytes.clone(), false));
     }
     entries.push((report_path.clone(), report_bytes, false));
 
@@ -482,6 +527,7 @@ pub fn cmd_import(
             .unwrap_or_default();
         let converter = match fmt.as_str() {
             "markdown" => azodoc_md::converter_name(),
+            "docx" => docx_converter.as_str(),
             _ => azodoc_html::converter_name(),
         };
         if let Err(e) = c.commit(&azodoc_container::revisions::CommitInfo {
@@ -831,6 +877,7 @@ fn refresh_cache(
             converter: match fmt {
                 "markdown" => azodoc_md::converter_name(),
                 "html" => azodoc_html::converter_name(),
+                "docx" => azodoc_docx::converter_name(),
                 _ => "athanor-txt",
             },
         },

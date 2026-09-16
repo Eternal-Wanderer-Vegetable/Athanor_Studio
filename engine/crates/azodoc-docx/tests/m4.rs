@@ -36,6 +36,8 @@ fn import_ast(ast: &Value) -> azodoc_convert::ImportOutput {
         title: azodoc_docx::ast_in::meta_title(ast),
         language: None,
         doc_extra: Default::default(),
+        annotations: Vec::new(),
+        theme: None,
         log,
     }
 }

@@ -232,6 +232,10 @@ pub struct ImportOutput {
     pub language: Option<String>,
     /// frontmatter 等来源的未知文档级元数据（写入 manifest.document.extra）
     pub doc_extra: Map<String, Value>,
+    /// 语义标注（B2：DOCX 批注 → semantics/annotations.json；空 = 不写该层）
+    pub annotations: Vec<Value>,
+    /// 表现层主题（B2：DOCX 样式 → presentation/theme.json；None = 不写该层）
+    pub theme: Option<Value>,
     pub log: LossLog,
 }
 

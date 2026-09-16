@@ -80,6 +80,8 @@ pub fn import(html: &str, job: &mut ImportJob) -> ImportOutput {
         title,
         language: None,
         doc_extra: Default::default(),
+        annotations: Vec::new(),
+        theme: None,
         log,
     }
 }
