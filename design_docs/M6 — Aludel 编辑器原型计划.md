@@ -1,8 +1,9 @@
 # M6 — Aludel 编辑器原型：RFC 与执行计划
 
-> **Status:** **M6.1 已交付**（2026-09-16，`azodoc-pm` 落地，19 项测试绿，全仓 107 测试绿）。
-> 本文存档自 Future Work §A1 的重启规划，含完整 RFC、Prima ↔ ProseMirror 映射表初版
-> 与分阶段计划；**后续修订直接改本文**。M6.2（`aludel` server）为下一阶段。
+> **Status:** **M6.1 + M6.2 已交付**（2026-09-16；`azodoc-pm` 19 项测试、`aludel` 7 项测试，
+> 全仓 114 测试绿）。本文存档自 Future Work §A1 的重启规划，含完整 RFC、
+> Prima ↔ ProseMirror 映射表初版与分阶段计划；**后续修订直接改本文**。
+> **下一阶段：** M6.3（ProseMirror 正式前端）。
 > **上游依据:** 《Azodoc v0.1 — 落地方案》§9 M6 行 + 《Future Work — 可选项与后续计划》§A1。
 > **基线:** M0–M5 + C7/A2/B1 已交付，CI 双平台，全仓 88 测试绿。
 
@@ -257,12 +258,29 @@ M2 语料（md/html × basic/lossy）往返恒等（或幂等 + 归一化说明�
 > - 验收对照（RFC §1 之①）：M2 语料往返恒等 ✅；R2 夹具（forward-compat 的
 >   unknown 块/span、payload_ref、条目级 type）保真 ✅；ID 补发（缺失/重复/非法）✅。
 
-### M6.2 — `aludel` server 与保存管线（约 1 周）
+### M6.2 — `aludel` server 与保存管线（约 1 周）【已交付】
 
 新 crate `engine/crates/aludel`：`main.rs`（启动 + 开浏览器）、`http.rs`（最小 HTTP）、
 `api.rs`（open/save/verify，直调 azodoc-container/-convert/-pm 与
 `athanor_cli::relocate_annotations_layer`）。e2e：open → 程序化改 PM-JSON → save →
 `athanor verify` 绿 → history 出现 `human:<id>` → 重定位统计正确。
+
+> **实施记录（2026-09-16，全部达成）**
+> - 交付物：`engine/crates/aludel`（lib + bin；`http.rs` 约 190 行最小 HTTP/1.1、
+>   `api.rs` 保存七步管线、`static/index.html` 冒烟页、`tests/m6_2_e2e.rs` 7 项 e2e）。
+>   `engine/Cargo.toml` members 注册（存量改动）。
+> - API 面（即未来 A3 Tauri command 层候选）：`GET /api/doc`（PM 状态 + 语义层 +
+>   修订链 + unknown/失配损失盘点 + 容器警告）、`POST /api/save`（七步管线，见 §3）、
+>   `POST /api/verify`（复用 `athanor verify`）。server 仅监听 127.0.0.1、绑定启动时
+>   唯一文档；保存经进程内互斥锁串行化；请求体上限 64 MiB；handler panic 拦截为 500。
+> - 七步管线落点：`pm_to_content_file`（ID 补发走 `AzodocId::generate`）→
+>   `validate::check_content`（Error 级拒绝保存，含悬空 footnote_ref / payload_ref
+>   存在性）→ `set_entry` → `relocate_annotations_layer`（复用 `athanor-cli`）→
+>   `commit(author_type: "human")`（硬编码）→ `write()` 回写 → 响应统计。
+> - e2e 断言（7 项全绿）：human 修订落链 + manifest 推进 + **保存后
+>   `athanor verify` 通过**（验收②③④）；未知 PM 节点/悬空 footnote_ref 拒绝且
+>   原文件无损；HTTP 栈全链路（静态页/open/save/404/413）；手动 curl 冒烟通过。
+> - 全仓 114 测试绿，clippy/fmt 清零。
 
 ### M6.3 — ProseMirror 前端原型（约 1–1.5 周）
 

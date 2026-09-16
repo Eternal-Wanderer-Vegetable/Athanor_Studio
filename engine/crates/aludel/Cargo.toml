@@ -1,0 +1,15 @@
+[package]
+name = "aludel"
+description = "Aludel — Azodoc 文档编辑器原型（M6.2：本地 server + 保存落链管线）"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+azodoc-container = { path = "../azodoc-container" }
+azodoc-convert = { path = "../azodoc-convert" }
+azodoc-model = { path = "../azodoc-model" }
+azodoc-pm = { path = "../azodoc-pm" }
+athanor-cli = { path = "../athanor-cli" }
+serde_json.workspace = true
+thiserror.workspace = true
