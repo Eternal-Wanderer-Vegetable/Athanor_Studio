@@ -17,4 +17,7 @@ fn main() {
     ico.extend_from_slice(png);
     std::fs::write(dir.join("icon.ico"), ico).expect("write studio icon");
     println!("cargo:rerun-if-changed=tauri.conf.json");
+    // Embed Tauri's Windows manifest (Common Controls v6) and platform
+    // resources. Without this, TaskDialogIndirect fails at process load time.
+    tauri_build::build();
 }
