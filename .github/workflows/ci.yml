@@ -15,7 +15,7 @@
 
 # Athanor 引擎 CI：rustfmt + clippy(-D warnings) + cargo test（双平台矩阵）。
 # Cargo workspace 位于 engine/。可选外部工具在 CI 中齐备：
-#   - pandoc：ubuntu 预装；Windows 经 choco 安装（DOCX e2e 测试）
+#   - pandoc：Linux 经 apt 安装；Windows 经 choco 安装（DOCX e2e 测试）
 #   - 浏览器：ubuntu 自带 google-chrome；Windows 自带 Edge（PDF e2e 测试）
 
 name: CI
@@ -73,6 +73,7 @@ jobs:
             curl \
             wget \
             file \
+            pandoc \
             pkg-config \
             libglib2.0-dev \
             libgtk-3-dev \
