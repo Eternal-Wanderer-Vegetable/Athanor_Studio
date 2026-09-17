@@ -18,6 +18,7 @@
 
 use aludel::api::{route, App};
 use aludel::http::{self, Request};
+use aludel::session::DocumentSession;
 use serde_json::{json, Value};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -419,4 +420,15 @@ fn route_handles_raw_request_struct() {
     assert_eq!(resp.status, 200);
     let html = String::from_utf8(resp.body).unwrap();
     assert!(html.contains("ALUDEL"));
+}
+
+#[test]
+fn document_session_facade_reuses_core_operations() {
+    let (_dir, doc) = make_doc("session");
+    let session = DocumentSession::new(doc.clone());
+
+    let opened = session.open().expect("session open 应复用核心实现");
+    assert_eq!(opened["pm_doc"]["type"], "doc");
+    assert_eq!(session.doc_path(), doc.as_path());
+    assert_eq!(session.verify()["ok"], true);
 }

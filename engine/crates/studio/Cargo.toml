@@ -1,0 +1,20 @@
+[package]
+name = "studio"
+description = "Athanor Studio desktop shell (Tauri command bridge)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+build = "build.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.6", features = [] }
+
+[dependencies]
+aludel = { path = "../aludel" }
+athanor-cli = { path = "../athanor-cli" }
+azodoc-container = { path = "../azodoc-container" }
+tempfile = "3"
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+tauri = { version = "2.8.5", features = ["devtools"] }
+thiserror.workspace = true

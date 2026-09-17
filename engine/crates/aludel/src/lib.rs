@@ -21,6 +21,7 @@
 
 pub mod api;
 pub mod http;
+pub mod session;
 
 /// 编辑器前端：`editor/` 的 vite 单文件构建产物（JS/CSS 内联），入库管理——
 /// CI（纯 Rust）不需要 Node。重新构建：`cd editor && npm install && npm run build`。

@@ -24,6 +24,7 @@ import { keymap } from "prosemirror-keymap";
 import { history, undo, redo } from "prosemirror-history";
 import { schema } from "./schema";
 import "prosemirror-view/style/prosemirror.css";
+import { Channel, invoke } from "@tauri-apps/api/core";
 
 interface DocResponse {
   path: string;
@@ -46,10 +47,21 @@ interface DocResponse {
   };
 }
 
+interface JobSnapshot {
+  id: number;
+  phase: string;
+  progress: number;
+  result?: { output?: string; document?: string; report?: { summary?: { loss?: Record<string, number> } } };
+  error?: { code: string; message: string };
+}
+
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 
 let view: EditorView;
 let currentDoc: DocResponse | null = null;
+let dirty = false;
+let activeJob: number | null = null;
+const tauriMode = "__TAURI_INTERNALS__" in window;
 
 // ---------------------------------------------------------------- 装配
 
@@ -91,8 +103,32 @@ function createEditor(docJson: Record<string, unknown>): EditorView {
         return false;
       },
     },
-    dispatchTransaction: (tr: Transaction) => view.updateState(view.state.apply(tr)),
+    dispatchTransaction: (tr: Transaction) => {
+      view.updateState(view.state.apply(tr));
+      dirty = true;
+      document.title = `Athanor Studio — ${currentDoc?.path ?? "未命名"} *`;
+    },
   });
+}
+
+async function command<T>(name: string, args: Record<string, unknown>): Promise<T> {
+  return invoke<T>(name, args);
+}
+
+function mountDocument(d: DocResponse): void {
+  currentDoc = d;
+  view?.destroy();
+  view = createEditor(d.pm_doc);
+  dirty = false;
+  document.title = `Athanor Studio — ${d.path}`;
+  renderSidebar(d);
+  toolbar();
+  $("save").addEventListener("click", () => void save());
+  $("verify").addEventListener("click", () => void verify());
+  $("import").addEventListener("click", () => void runJob("import"));
+  $("export").addEventListener("click", () => void runJob("export"));
+  $("publish").addEventListener("click", () => void runJob("publish"));
+  $("cancel-job").addEventListener("click", () => void cancelJob());
 }
 
 // ---------------------------------------------------------------- 侧栏
@@ -181,17 +217,68 @@ function setMsg(text: string, ok: boolean): void {
   el.className = ok ? "ok" : "bad";
 }
 
+function renderJob(snapshot: JobSnapshot): void {
+  activeJob = ["succeeded", "failed", "cancelled"].includes(snapshot.phase) ? null : snapshot.id;
+  const cancel = $("cancel-job") as HTMLButtonElement | null;
+  if (cancel) cancel.disabled = activeJob === null;
+  if (snapshot.error) {
+    setMsg(`任务失败: ${snapshot.error.message}`, false);
+    return;
+  }
+  const loss = snapshot.result?.report?.summary?.loss;
+  const lossText = loss ? ` · 损失 ${Object.values(loss).reduce((a, b) => a + b, 0)} 项` : "";
+  const labels: Record<string, string> = { queued: "排队中", running: "运行中", cancelling: "取消中", committing: "提交结果中", succeeded: "已完成", cancelled: "已取消", failed: "失败" };
+  setMsg(`任务 #${snapshot.id} ${labels[snapshot.phase] ?? snapshot.phase} ${snapshot.progress}%${lossText}`, snapshot.phase !== "failed");
+  if (snapshot.phase === "succeeded" && snapshot.result?.document && snapshot.result.document !== currentDoc?.path) {
+    void command<DocResponse>("open_document", { path: snapshot.result.document }).then(mountDocument);
+  }
+}
+
+async function runJob(kind: "import" | "export" | "publish"): Promise<void> {
+  if (!tauriMode || activeJob !== null) return;
+  const input = kind === "import" ? window.prompt("导入文件路径：") : currentDoc?.path;
+  if (!input) return;
+  const output = window.prompt(kind === "import" ? "Azodoc 输出路径：" : kind === "publish" ? "PDF 输出路径：" : "导出文件路径：");
+  if (!output) return;
+  const channel = new Channel<JobSnapshot>();
+  channel.onmessage = (snapshot) => renderJob(snapshot);
+  const request = kind === "import"
+    ? { kind, input, output, reader: "auto" }
+    : kind === "export"
+      ? { kind, input, output, format: "markdown" }
+      : { kind, input, output, noPaged: false };
+  try {
+    activeJob = await command<number>("run_job", { request, onUpdate: channel });
+    setMsg(`任务 #${activeJob} 已排队`, true);
+  } catch (e) {
+    setMsg(`任务无法启动: ${e instanceof Error ? e.message : String(e)}`, false);
+  }
+}
+
+async function cancelJob(): Promise<void> {
+  if (activeJob === null) return;
+  try {
+    await command<boolean>("cancel_job", { jobId: activeJob });
+  } catch (e) {
+    setMsg(`取消失败: ${e instanceof Error ? e.message : String(e)}`, false);
+  }
+}
+
 async function save(): Promise<void> {
   const btn = $("save") as HTMLButtonElement;
   btn.disabled = true;
   setMsg("保存中…", true);
   try {
     const message = ($("message") as HTMLInputElement).value.trim();
-    const { status, data } = await post("/api/save", {
+    const body = {
       pm_doc: view.state.doc.toJSON(),
       message: message || undefined,
       author_id: "local",
-    });
+    };
+    const result = tauriMode
+      ? { status: 200, data: await command<Record<string, unknown>>("save_document", { sessionId: currentDoc?.path, body }) }
+      : await post("/api/save", body);
+    const { status, data } = result;
     if (status === 200) {
       const rel = (data["relocate"] ?? null) as Record<string, number> | null;
       const relText = rel
@@ -199,9 +286,13 @@ async function save(): Promise<void> {
         : "";
       setMsg(`已落链 ${data["revision"]}（author:human，新 ID ${data["ids_assigned"]}）${relText}`, true);
       // 只刷新侧栏与修订号，不重置编辑器状态（保护光标与未保存输入）
-      const d = await (await fetch("/api/doc")).json();
+      const d = tauriMode
+        ? await command<DocResponse>("open_document", { path: currentDoc?.path })
+        : await (await fetch("/api/doc")).json();
       currentDoc = d as DocResponse;
       renderSidebar(currentDoc);
+      dirty = false;
+      document.title = `Athanor Studio — ${currentDoc.path}`;
     } else {
       setMsg("保存被拒绝: " + (data["error"] ?? status), false);
     }
@@ -217,7 +308,9 @@ async function verify(): Promise<void> {
   btn.disabled = true;
   setMsg("athanor verify 运行中…", true);
   try {
-    const { data } = await post("/api/verify", {});
+    const data = tauriMode
+      ? await command<Record<string, unknown>>("verify_document", { sessionId: currentDoc?.path })
+      : (await post("/api/verify", {})).data;
     setMsg(data["ok"] === true ? "athanor verify 通过 ✓" : "athanor verify 未通过（详见服务端输出）", data["ok"] === true);
   } finally {
     btn.disabled = false;
@@ -269,21 +362,39 @@ function toolbar(): void {
 
 async function boot(): Promise<void> {
   try {
+    if (tauriMode) {
+      setMsg("Athanor Studio 已启动，请点击“打开文档”。", true);
+      $("open").addEventListener("click", () => void openDocument());
+      return;
+    }
     const resp = await fetch("/api/doc");
     if (!resp.ok) {
       const err = (await resp.json()) as { error?: string };
       setMsg("文档打开失败: " + (err.error ?? resp.status), false);
       return;
     }
-    currentDoc = (await resp.json()) as DocResponse;
-    view = createEditor(currentDoc.pm_doc);
-    renderSidebar(currentDoc);
-    toolbar();
-    $("save").addEventListener("click", () => void save());
-    $("verify").addEventListener("click", () => void verify());
+    mountDocument((await resp.json()) as DocResponse);
   } catch (e) {
     setMsg("启动失败: " + (e as Error).stack, false);
   }
 }
+
+async function openDocument(): Promise<void> {
+  const path = window.prompt("Azodoc 文件路径：", currentDoc?.path ?? "");
+  if (!path) return;
+  try {
+    const d = await command<DocResponse>("open_document", { path });
+    mountDocument(d);
+    setMsg("文档已打开。", true);
+  } catch (e) {
+    setMsg(`打开失败: ${e instanceof Error ? e.message : String(e)}`, false);
+  }
+}
+
+window.addEventListener("beforeunload", (event) => {
+  if (!dirty) return;
+  event.preventDefault();
+  event.returnValue = "";
+});
 
 void boot();

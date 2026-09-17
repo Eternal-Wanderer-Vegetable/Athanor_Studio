@@ -96,7 +96,7 @@ azodoc-model 类型（唯一事实源）
 3. **恒等测试**：M2 语料与 spec 黄金样例 Prima→PM→Prima 往返恒等（§5）。
 
 C1（schemars 权威化）**不作为硬前置**：一致性测试就地提供"生成物与类型不漂移"的保证；
-C1 剩余部分（生成 Schema vs 手写 spec 的结构性 diff）仍留独立项。
+生成 Schema 与手写 spec 的结构性拓扑 diff 已在 `golden_schema.rs` 纳入 CI，并保留明确的兼容性豁免。
 
 ### 保存管线（A1 的心脏，M6.2 实现）
 

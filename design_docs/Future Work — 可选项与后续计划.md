@@ -131,6 +131,7 @@
 ## C. 工程债与规范演进类（M0–M5 期间记录在案）
 
 ### C1. Schemars JSON Schema 权威化
+> **状态（2026-09-17 更新）：结构性漂移检测已交付。** `golden_schema.rs` 现对 manifest 字段拓扑、内容节点/span 变体、属性集合与 required 集合执行 CI 比对；允许的 `serde(flatten)`、兼容性字段差异和 unknown content 兼容规则均显式记录。
 
 - **背景**：M1 验收 ④ 采取"双向接受性测试"（黄金样例在生成 Schema 与手写 spec
   Schema 下都通过），因为 schemars 产物与手写规范结构不同。
