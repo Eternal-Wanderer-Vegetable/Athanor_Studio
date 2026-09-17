@@ -32,6 +32,11 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # Bound parallel compiler/linker memory on hosted runners. Keep debug
+  # assertions enabled, but omit debug symbols from CI build artifacts.
+  CARGO_BUILD_JOBS: "2"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
 
 jobs:
   schema:
@@ -41,12 +46,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine -> target
       - name: Compare model and normative schema structure
         working-directory: engine
         run: cargo test -p azodoc-model --test golden_schema
 
   test:
     name: ci (${{ matrix.os }})
+    # Bound stalled runs while allowing a cold Tauri dependency build.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -55,11 +64,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Tauri dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            wget \
+            file \
+            pkg-config \
+            libglib2.0-dev \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev \
+            patchelf
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine -> target
 
       - name: Install Pandoc (Windows)
         if: runner.os == 'Windows'
@@ -70,9 +100,16 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Clippy（警告即错误）
+        timeout-minutes: 20
         working-directory: engine
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      - name: Compile tests
+        timeout-minutes: 30
+        working-directory: engine
+        run: cargo test --workspace --no-run
+
       - name: Tests
+        timeout-minutes: 10
         working-directory: engine
         run: cargo test --workspace
