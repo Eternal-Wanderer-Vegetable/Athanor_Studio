@@ -34,6 +34,17 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  schema:
+    name: Schema structure and golden samples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Compare model and normative schema structure
+        working-directory: engine
+        run: cargo test -p azodoc-model --test golden_schema
+
   test:
     name: ci (${{ matrix.os }})
     strategy:

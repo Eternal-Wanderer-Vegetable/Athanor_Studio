@@ -110,6 +110,112 @@ fn golden_layers_accepted_by_both_schemas() {
 
 type Shape = (BTreeSet<String>, BTreeSet<String>);
 
+#[test]
+fn structural_diff_detects_field_required_and_variant_drift() {
+    let original = content_schema();
+    let expected = variant_shapes(&original, "Node");
+    let mut changed = original.clone();
+    changed["$defs"]["Node"]["oneOf"][0]["properties"]
+        .as_object_mut()
+        .unwrap()
+        .remove("children");
+    assert_ne!(
+        variant_shapes(&changed, "Node"),
+        expected,
+        "removed field must fail"
+    );
+    let mut changed = original.clone();
+    changed["$defs"]["Node"]["oneOf"][0]["properties"]["new_field"] =
+        serde_json::json!({"type": "string"});
+    assert_ne!(
+        variant_shapes(&changed, "Node"),
+        expected,
+        "added field must fail"
+    );
+    let mut changed = original.clone();
+    changed["$defs"]["Node"]["oneOf"][0]["required"] = serde_json::json!(["type", "id"]);
+    assert_ne!(
+        variant_shapes(&changed, "Node"),
+        expected,
+        "optionalized field must fail"
+    );
+    let mut changed = original.clone();
+    changed["$defs"]["Node"]["oneOf"]
+        .as_array_mut()
+        .unwrap()
+        .remove(0);
+    assert_ne!(
+        variant_shapes(&changed, "Node"),
+        expected,
+        "removed variant must fail"
+    );
+    let mut changed = original.clone();
+    changed["$defs"]["Node"]["oneOf"][0]["required"]
+        .as_array_mut()
+        .unwrap()
+        .reverse();
+    assert_eq!(
+        variant_shapes(&changed, "Node"),
+        expected,
+        "ordering is immaterial"
+    );
+
+    let original = manifest_schema();
+    let expected = item_shape(&original, &original["properties"]["reports"]);
+    let mut changed = original.clone();
+    changed["$defs"]["ReportEntry"]["properties"]
+        .as_object_mut()
+        .unwrap()
+        .remove("sha256");
+    assert_ne!(
+        item_shape(&changed, &changed["properties"]["reports"]),
+        expected
+    );
+}
+
+#[test]
+fn nested_objects_match_with_explicit_compatibility_gaps() {
+    let generated = content_schema();
+    let spec: Value = serde_json::from_str(
+        &std::fs::read_to_string(spec_dir().join("json-schema/content.schema.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(shape(&generated, &generated), shape(&spec, &spec));
+    for (name, pointer) in [
+        ("ListItem", "/$defs/list/properties/items/items"),
+        ("TableColumn", "/$defs/table/properties/columns/items"),
+        ("TableRow", "/$defs/table/properties/rows/items"),
+        (
+            "TableCell",
+            "/$defs/table/properties/rows/items/properties/cells/items",
+        ),
+    ] {
+        let actual = shape(&generated, &generated["$defs"][name]);
+        let mut expected = shape(&spec, spec.pointer(pointer).unwrap());
+        if name == "ListItem" {
+            assert!(!actual.0.contains("type"));
+            assert!(!actual.1.contains("type"));
+            assert!(expected.0.remove("type"));
+            assert!(expected.1.remove("type"));
+        }
+        assert_eq!(actual, expected, "{name} nested structure drift");
+    }
+    for (family, spec_name) in [("Node", "unknown_block"), ("Span", "unknown_span")] {
+        let unknown = generated["$defs"][family]["oneOf"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|v| {
+                v.pointer("/properties/type/const").and_then(Value::as_str) == Some("unknown")
+            })
+            .unwrap();
+        assert!(!shape(&generated, unknown).1.contains("content"));
+        assert!(shape(&spec, &spec["$defs"][spec_name])
+            .1
+            .contains("content"));
+    }
+}
+
 /// Resolve only the structural parts needed for the diff. `$ref` names are
 /// intentionally ignored: schemars uses Rust type names while the normative
 /// spec uses protocol names.
