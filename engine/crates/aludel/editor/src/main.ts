@@ -25,7 +25,7 @@ import { schema } from "./schema";
 import { DocumentController, errText } from "./app/document-controller";
 import { CommandRegistry, type CommandContext } from "./app/command-registry";
 import { findAll, selectMatch, replaceCurrent, replaceAll } from "./app/find";
-import { addTableRow, deleteTableRow, addTableColumn, deleteTableColumn, toggleHeaderRow } from "./app/table-commands";
+import { addTableRow, deleteTableRow, addTableColumn, deleteTableColumn, toggleHeaderRow, mergeTableCells, splitTableCell } from "./app/table-commands";
 import {
   setParagraphFormat,
   setCharacterFormat,
@@ -248,12 +248,32 @@ reg("table.rowDelete", "删除表格行", () => pmRun(deleteTableRow as never));
 reg("table.colAdd", "增加表格列", () => pmRun(addTableColumn as never));
 reg("table.colDelete", "删除表格列", () => pmRun(deleteTableColumn as never));
 reg("table.header", "切换表头", () => pmRun(toggleHeaderRow as never));
+reg("table.merge", "合并右侧单元格", () => pmRun(mergeTableCells as never));
+reg("table.split", "拆分单元格", () => pmRun(splitTableCell as never));
 reg("insert.math", "数学块", () => {
   const v = ctl.view;
   if (!v) return;
   void askText("LaTeX 源码", "E = mc^2").then((latex) => {
     if (latex === null || ctl.view !== v) return;
     v.dispatch(v.state.tr.replaceSelectionWith(schema.nodes.math_block.create({ latex })));
+    v.focus();
+  });
+});
+reg("insert.footnote", "脚注", () => {
+  const v = ctl.view;
+  if (!v) return;
+  void askText("脚注内容", "").then((text) => {
+    if (text === null || ctl.view !== v) return;
+    const noteId = newId("blk");
+    const paragraph = schema.nodes.paragraph.create(
+      { id: newId("blk") },
+      text ? schema.text(text) : undefined,
+    );
+    const ref = schema.nodes.footnote_ref.create({ id: noteId });
+    const note = schema.nodes.footnote.create({ id: noteId }, paragraph);
+    const tr = v.state.tr.replaceSelectionWith(ref);
+    tr.insert(tr.doc.content.size, note);
+    v.dispatch(tr.scrollIntoView());
     v.focus();
   });
 });
@@ -401,7 +421,10 @@ async function boot(): Promise<void> {
     ["tb-col-add", "table.colAdd"],
     ["tb-row-del", "table.rowDelete"],
     ["tb-col-del", "table.colDelete"],
+    ["tb-cell-merge", "table.merge"],
+    ["tb-cell-split", "table.split"],
     ["tb-math", "insert.math"],
+    ["tb-footnote", "insert.footnote"],
     ["tb-rule", "insert.rule"],
     ["tb-strong", "format.strong"],
     ["tb-em", "format.em"],

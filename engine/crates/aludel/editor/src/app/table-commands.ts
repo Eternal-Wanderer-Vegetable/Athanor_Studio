@@ -91,3 +91,45 @@ export const toggleHeaderRow: Command = (state, dispatch) => {
   dispatch(state.tr.setNodeMarkup(ctx.tablePos, ctx.table.type, { ...ctx.table.attrs, header_row: ctx.table.attrs.header_row === true ? null : true }));
   return true;
 };
+
+/** Merge the active cell with the cell immediately to its right. */
+export const mergeTableCells: Command = (state, dispatch) => {
+  const ctx = tableContext(state);
+  if (!ctx || !dispatch) return false;
+  const row = ctx.table.child(ctx.rowIndex);
+  if (ctx.cellIndex >= row.childCount - 1) return false;
+  const left = row.child(ctx.cellIndex);
+  const right = row.child(ctx.cellIndex + 1);
+  const colSpan = (Number(left.attrs.colSpan) || 1) + (Number(right.attrs.colSpan) || 1);
+  const merged = left.type.create(
+    { ...left.attrs, colSpan: colSpan > 1 ? colSpan : null },
+    left.content.append(right.content),
+  );
+  const cells = row.content.content.slice();
+  cells.splice(ctx.cellIndex, 2, merged);
+  const rows = ctx.table.content.content.slice();
+  rows[ctx.rowIndex] = row.copy(Fragment.from(cells));
+  return replaceTable(state, dispatch, ctx, rows);
+};
+
+/** Split the active horizontally merged cell into empty sibling cells. */
+export const splitTableCell: Command = (state, dispatch) => {
+  const ctx = tableContext(state);
+  if (!ctx || !dispatch) return false;
+  const row = ctx.table.child(ctx.rowIndex);
+  const cell = row.child(ctx.cellIndex);
+  const span = Number(cell.attrs.colSpan) || 1;
+  if (span <= 1) return false;
+  const paragraph = cell.type.schema.nodes.paragraph.create({ id: id("blk") });
+  const cells = [
+    cell.type.create({ ...cell.attrs, colSpan: null }, cell.content),
+    ...Array.from({ length: span - 1 }, (_, offset) =>
+      cell.type.create({ id: id("cel"), column: Number(cell.attrs.column) + offset + 1 }, paragraph),
+    ),
+  ];
+  const nextCells = row.content.content.slice();
+  nextCells.splice(ctx.cellIndex, 1, ...cells);
+  const rows = ctx.table.content.content.slice();
+  rows[ctx.rowIndex] = row.copy(Fragment.from(nextCells));
+  return replaceTable(state, dispatch, ctx, rows);
+};
