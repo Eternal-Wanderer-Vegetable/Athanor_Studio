@@ -17,6 +17,7 @@
 //! 桌面专有能力（对话框、草稿、最近文件、任务）显式禁用。
 
 import type {
+  DocResponse,
   DocumentGateway,
   JobRequest,
   JobSnapshot,
@@ -108,6 +109,15 @@ export class HttpGateway implements DocumentGateway {
     const { status, data } = await post("/api/preview", body);
     if (status !== 200) throw new Error(String(data["error"] ?? `HTTP ${status}`));
     return data as unknown as PreviewResult;
+  }
+
+  async checkoutRevision(
+    _sessionId: string,
+    body: Record<string, unknown>,
+  ): Promise<DocResponse> {
+    const { status, data } = await post("/api/checkout", body);
+    if (status !== 200) throw new Error(String(data["error"] ?? `HTTP ${status}`));
+    return data as unknown as DocResponse;
   }
 
   async pickOpen(): Promise<string | null> {

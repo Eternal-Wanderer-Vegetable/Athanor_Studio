@@ -811,3 +811,110 @@ fn page_break_and_preview_endpoints() {
     );
     assert_eq!(athanor_cli::verify_cmd::run(&doc), 0, "verify 必须通过");
 }
+
+/// E5: 修订快照携带主题；checkout 端点还原主题并返回 theme_restored；
+/// 无主题快照的修订如实报告（仅正文历史）。
+#[test]
+fn checkout_restores_theme_snapshot_and_reports_body_only() {
+    let (_dir, doc) = make_doc("checkout");
+    let app = App::new(doc.clone());
+    let pm = || {
+        json!({
+            "type": "doc", "attrs": {"schema_version": "1.0", "extra": null},
+            "content": [
+                {"type": "paragraph", "attrs": {"id": "blk_00000000000000000000000090", "extra": null},
+                 "content": [{"type": "text", "text": "v1"}]}
+            ]
+        })
+    };
+    // v1：主题 A4
+    let r1 = app
+        .save(&json!({
+            "pm_doc": pm(),
+            "theme": {"schema_version": "1.0", "theme": "default", "pageSize": "A4"},
+            "author_id": "u"
+        }))
+        .expect("v1 保存应成功");
+    let rev_v1 = r1["revision"].as_str().unwrap().to_string();
+
+    // v2：内容 + 主题都变（Letter）
+    let mut pm2 = pm();
+    pm2["content"].as_array_mut().unwrap().push(json!({
+        "type": "paragraph", "attrs": {"id": "blk_00000000000000000000000091", "extra": null},
+        "content": [{"type": "text", "text": "v2"}]
+    }));
+    let r2 = app
+        .save(&json!({
+            "pm_doc": pm2,
+            "theme": {"schema_version": "1.0", "theme": "default", "pageSize": "Letter"},
+            "author_id": "u"
+        }))
+        .expect("v2 保存应成功");
+    let rev_v2 = r2["revision"].as_str().unwrap().to_string();
+
+    // open：两条编辑器修订带 theme_sha256；importer 初始修订无（仅正文历史）
+    let opened = app.open().expect("open 应成功");
+    let hist = opened["history"].as_array().unwrap();
+    let find = |id: &str| hist.iter().find(|e| e["id"] == json!(id)).unwrap();
+    assert!(
+        find(&rev_v1)["theme_sha256"].is_string(),
+        "v1 应携带主题快照"
+    );
+    assert!(
+        find(&rev_v2)["theme_sha256"].is_string(),
+        "v2 应携带主题快照"
+    );
+    let importer = hist
+        .iter()
+        .find(|e| e["author_type"] == "importer")
+        .expect("应有 importer 初始修订");
+    assert!(
+        importer["theme_sha256"].is_null(),
+        "导入时无主题层 → 仅正文历史"
+    );
+    assert_eq!(opened["theme"]["pageSize"], "Letter");
+
+    // checkout 回 v1：内容还原 + 主题还原 + theme_restored=true
+    let doc_after = app
+        .checkout(&json!({"revision": rev_v1}))
+        .expect("checkout 应成功");
+    assert_eq!(doc_after["theme_restored"], true);
+    assert_eq!(doc_after["theme"]["pageSize"], "A4");
+    assert_eq!(
+        doc_after["pm_doc"]["content"].as_array().unwrap().len(),
+        1,
+        "v2 的段落应消失"
+    );
+    assert_eq!(doc_after["revision"], rev_v1);
+    assert_eq!(athanor_cli::verify_cmd::run(&doc), 0, "verify 必须通过");
+
+    // 回到 v2 后手动构造"仅正文历史"：链中条目去掉 theme 成员（模拟旧文档）
+    {
+        let mut c = read_container(&doc);
+        let mut chain: Value =
+            serde_json::from_slice(&c.read_entry("revisions/chain.json").unwrap()).unwrap();
+        let revs = chain["revisions"].as_array_mut().unwrap();
+        let target = revs.iter_mut().find(|r| r["id"] == json!(rev_v2)).unwrap();
+        target.as_object_mut().unwrap().remove("theme_path");
+        target.as_object_mut().unwrap().remove("theme_sha256");
+        let mut cb = serde_json::to_vec_pretty(&chain).unwrap();
+        cb.push(b'\n');
+        c.set_entry("revisions/chain.json", cb).unwrap();
+        std::fs::write(&doc, c.write().unwrap()).unwrap();
+    }
+    // 旧形态修订：theme_restored=false、主题保持当前（不伪造）
+    let doc_after2 = app
+        .checkout(&json!({"revision": rev_v2}))
+        .expect("checkout 旧形态应成功");
+    assert_eq!(doc_after2["theme_restored"], false);
+    assert_eq!(
+        doc_after2["theme"]["pageSize"], "A4",
+        "仅正文历史不回滚主题"
+    );
+    // open 侧警告：仅正文历史如实提示
+    assert!(doc_after2["warnings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|w| w.as_str().unwrap().contains("仅正文历史")));
+}

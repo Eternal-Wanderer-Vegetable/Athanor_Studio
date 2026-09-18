@@ -63,7 +63,7 @@ let zoom = 1;
 
 const ctl = new DocumentController($("editor"), gateway, {
   onStateChange: refreshUI,
-  onDocMeta: renderSidebar,
+  onDocMeta: (d) => renderSidebar(d, (rev) => void ctl.checkoutRevision(rev)),
   onMessage: setMsg,
   onOutline: (headings) =>
     renderOutline(headings, (pos) => {

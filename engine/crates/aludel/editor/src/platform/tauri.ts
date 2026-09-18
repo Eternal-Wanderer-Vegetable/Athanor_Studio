@@ -18,6 +18,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { open as dialogOpen, save as dialogSave, confirm as dialogConfirm } from "@tauri-apps/plugin-dialog";
 import type {
+  DocResponse,
   DocumentGateway,
   JobRequest,
   JobSnapshot,
@@ -98,6 +99,13 @@ export class TauriGateway implements DocumentGateway {
     body: Record<string, unknown>,
   ): Promise<PreviewResult> {
     return invoke<PreviewResult>("preview_document", { sessionId, body });
+  }
+
+  async checkoutRevision(
+    sessionId: string,
+    body: Record<string, unknown>,
+  ): Promise<DocResponse> {
+    return invoke<DocResponse>("checkout_revision", { sessionId, body });
   }
 
   async pickOpen(): Promise<string | null> {

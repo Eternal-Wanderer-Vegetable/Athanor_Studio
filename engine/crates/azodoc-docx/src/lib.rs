@@ -28,6 +28,7 @@
 pub mod ast_in;
 pub mod ast_out;
 pub mod bridge;
+pub mod capabilities;
 pub mod inventory;
 pub mod ooxml;
 

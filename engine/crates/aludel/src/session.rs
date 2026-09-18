@@ -113,6 +113,12 @@ impl DocumentSession {
         self.app.preview(body)
     }
 
+    /// Restore the session document to a revision snapshot (E5).
+    /// Returns the re-opened document payload plus `theme_restored`.
+    pub fn checkout(&self, body: &Value) -> Result<Value, ApiError> {
+        self.app.checkout(body)
+    }
+
     /// Verify the bound document using the engine verifier.
     pub fn verify(&self) -> Result<Value, ApiError> {
         self.app.verify()

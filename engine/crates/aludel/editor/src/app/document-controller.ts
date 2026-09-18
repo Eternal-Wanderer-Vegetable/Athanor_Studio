@@ -90,7 +90,11 @@ export class DocumentController {
   setPageTheme(theme: PageTheme): void {
     this.pageTheme = normalizePageTheme(theme);
     this.applyPageThemeToWorkspace();
+    // 主题与正文共用同一代数：theme-only 修改同样推进代际、
+    // 排队在途保存后的补存，并纳入恢复草稿（E5）。
+    this.store.markEdited();
     this.recomputeDirty();
+    this.scheduleRecovery();
     this.hooks.onStateChange();
   }
 
@@ -582,6 +586,37 @@ export class DocumentController {
     }
   }
 
+  // ---------------------------------------------------------------- 修订
+
+  /** 还原到某修订快照（E5）。未保存改动先确认丢弃；
+   *  修订未带主题快照时如实提示"仅正文历史"（主题继承最近状态）。 */
+  async checkoutRevision(revId: string): Promise<void> {
+    if (!this.view) return;
+    const s = this.store.state;
+    if (!(await this.confirmDiscardIfDirty())) return;
+    const epoch = s.epoch;
+    const sessionId = s.sessionId;
+    this.hooks.onMessage(`还原修订 ${revId}…`, true);
+    try {
+      const doc = await this.gateway.checkoutRevision(sessionId, {
+        revision: revId,
+        expected_fingerprint: s.fingerprint ?? undefined,
+      });
+      if (epoch !== this.store.currentEpoch()) return;
+      this.mount({ sessionId, doc });
+      this.hooks.onMessage(
+        doc.theme_restored === false
+          ? `已还原修订 ${revId}（该修订无主题快照——仅正文历史，主题继承最近状态）`
+          : `已还原修订 ${revId}`,
+        true,
+      );
+    } catch (e) {
+      if (epoch !== this.store.currentEpoch()) return;
+      this.hooks.onMessage(`还原失败: ${errText(e)}`, false);
+    }
+    this.hooks.onStateChange();
+  }
+
   // ---------------------------------------------------------------- 任务
 
   /** 导出/出版固定为“先保存当前快照，再对该版本跑任务”。 */
@@ -671,6 +706,13 @@ export class DocumentController {
     }
     const loss = snapshot.result?.report?.summary?.loss;
     const lossText = loss ? ` · 损失 ${Object.values(loss).reduce((a, b) => a + b, 0)} 项` : "";
+    // E5：输出修订 + DOCX 能力矩阵摘要（支持/降级/保留计数）。
+    const outRev = snapshot.result?.report?.target?.revision;
+    const revText = outRev ? ` · 输出修订 ${outRev}` : "";
+    const cap = snapshot.result?.report?.capabilities?.counts;
+    const capText = cap
+      ? ` · 能力矩阵 支持${cap["supported"] ?? 0}/降级${cap["degraded"] ?? 0}/保留${cap["preserved"] ?? 0}`
+      : "";
     const labels: Record<string, string> = {
       queued: "排队中",
       running: "运行中",
@@ -681,7 +723,7 @@ export class DocumentController {
       failed: "失败",
     };
     this.hooks.onMessage(
-      `任务 #${snapshot.id} ${labels[snapshot.phase] ?? snapshot.phase} ${snapshot.progress}%${lossText}`,
+      `任务 #${snapshot.id} ${labels[snapshot.phase] ?? snapshot.phase} ${snapshot.progress}%${lossText}${revText}${capText}`,
       snapshot.phase !== "failed",
     );
     // 导入完成后重新打开产物（epoch 守卫由 openPath 自己再做一次）

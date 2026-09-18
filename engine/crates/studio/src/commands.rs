@@ -156,6 +156,25 @@ pub fn preview_document(
         .map_err(SessionError::from)
 }
 
+/// 还原到某修订快照（E5，spec §5.3）。body: {revision, expected_fingerprint?}；
+/// 返回重开的文档全貌 + `theme_restored`（false = 仅正文历史）。
+#[tauri::command]
+pub fn checkout_revision(
+    state: tauri::State<'_, SessionRegistry>,
+    jobs: tauri::State<'_, crate::jobs::JobManager>,
+    session_id: String,
+    body: Value,
+) -> Result<Value, SessionError> {
+    let _commit = jobs
+        .commit_gate
+        .lock()
+        .map_err(|_| SessionError::new("state_poisoned", "studio commit state is unavailable"))?;
+    state
+        .session(&session_id)?
+        .checkout(&body)
+        .map_err(SessionError::from)
+}
+
 #[tauri::command]
 pub fn close_document(
     state: tauri::State<'_, SessionRegistry>,

@@ -166,7 +166,8 @@ impl App {
             json!({"schema_version": "1.0", "annotations": []})
         };
 
-        let theme = if c.has_entry(THEME_ENTRY) {
+        let has_theme_layer = c.has_entry(THEME_ENTRY);
+        let theme = if has_theme_layer {
             let bytes = c
                 .read_entry(THEME_ENTRY)
                 .map_err(|e| ApiError::Doc(e.friendly()))?;
@@ -175,9 +176,27 @@ impl App {
             json!({})
         };
 
-        let history: Vec<Value> = c
-            .history()
-            .map_err(|e| ApiError::Doc(e.friendly()))?
+        let history_entries = c.history().map_err(|e| ApiError::Doc(e.friendly()))?;
+        // §5.3：当前修订未记录主题快照（仅正文历史）且存在 theme 层时，
+        // 如实提示——checkout 到这类修订表现层不落，不伪造主题。
+        let mut warnings = warnings;
+        if has_theme_layer {
+            if let Some(cur) = c.manifest_typed().current_revision.as_deref() {
+                let cur_has_theme = history_entries
+                    .iter()
+                    .find(|e| e.id == cur)
+                    .map(|e| e.theme_sha256.is_some())
+                    .unwrap_or(false);
+                if !cur_has_theme {
+                    warnings.push(
+                        "当前修订未记录表现层主题快照（仅正文历史）；主题继承自最近状态"
+                            .to_string(),
+                    );
+                }
+            }
+        }
+
+        let history: Vec<Value> = history_entries
             .iter()
             .map(|e| {
                 json!({
@@ -189,6 +208,7 @@ impl App {
                     "timestamp": e.timestamp,
                     "is_head": e.is_head,
                     "is_current": e.is_current,
+                    "theme_sha256": e.theme_sha256,
                 })
             })
             .collect();
@@ -437,6 +457,40 @@ impl App {
         Ok(resp)
     }
 
+    /// POST /api/checkout —— 还原到某修订快照（E5，spec §5.3）。
+    /// content（与可选的主题快照）经原子写回；响应返回重开的文档全貌
+    /// 与 `theme_restored` 标记（未携带主题快照 = 仅正文历史，如实提示）。
+    pub fn checkout(&self, body: &Value) -> Result<Value, ApiError> {
+        let Some(rev) = body.get("revision").and_then(Value::as_str) else {
+            return Err(ApiError::BadRequest("缺少 revision 字段".into()));
+        };
+        let expected = body.get("expected_fingerprint").and_then(Value::as_str);
+        let theme_restored;
+        {
+            let mut store = self.state.lock().unwrap_or_else(|e| e.into_inner());
+            Self::check_external_change(&store, expected)?;
+            let (mut c, _) = Self::open_container_from(&store)?;
+            let info = c.checkout(rev).map_err(|e| ApiError::Doc(e.friendly()))?;
+            // 标注自动重定位（与 CLI checkout 同一语义）
+            let _ = athanor_cli::commands_m3::relocate_annotations_layer(&mut c)
+                .map_err(|e| ApiError::Doc(e.friendly()))?;
+            let out = c.write().map_err(|e| ApiError::Doc(e.friendly()))?;
+            match &mut *store {
+                Store::Draft(bytes) => *bytes = out,
+                Store::File(path) => {
+                    let path = path.clone();
+                    doc_store::atomic_write(&path, &out)
+                        .map_err(|e| ApiError::Doc(format!("容器回写失败: {e}")))?;
+                }
+            }
+            theme_restored = info.theme_restored;
+        }
+        // 重开拿到与 GET /api/doc 完全一致的全貌（PM/主题/历史/警告）。
+        let mut doc = self.open()?;
+        doc["theme_restored"] = json!(theme_restored);
+        Ok(doc)
+    }
+
     /// POST /api/preview —— 印刷预览快照（E4）。
     /// 与出版共用同一条渲染管线（load_export_doc + theme→@page CSS +
     /// augment_print_html），但走 LayoutIndex 变体：块带 `data-block-id`，
@@ -634,6 +688,13 @@ pub fn route(app: &App, req: &Request) -> Response {
         },
         ("POST", "/api/preview") => match serde_json::from_slice::<Value>(&req.body) {
             Ok(v) => respond(app.preview(&v)),
+            Err(e) => Response::json_with_status(
+                400,
+                &json!({ "error": format!("请求体不是合法 JSON: {e}") }),
+            ),
+        },
+        ("POST", "/api/checkout") => match serde_json::from_slice::<Value>(&req.body) {
+            Ok(v) => respond(app.checkout(&v)),
             Err(e) => Response::json_with_status(
                 400,
                 &json!({ "error": format!("请求体不是合法 JSON: {e}") }),

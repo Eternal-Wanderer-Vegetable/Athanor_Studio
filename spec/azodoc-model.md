@@ -146,6 +146,8 @@ ULID 采用 Crockford Base32 字母表（`0-9` + `A-Z` 去 `I L O U`），26 位
 
 **horizontal_rule** — 无附加字段
 
+**page_break** — 无附加字段（手动分页符；连续视图为渲染 hint，印刷/DOCX 导出为真实分页）
+
 **math_block** — `latex: string`（LaTeX 数学子集）
 
 ### 6.8 提示块

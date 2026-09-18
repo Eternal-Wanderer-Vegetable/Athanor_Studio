@@ -158,6 +158,12 @@ pub enum Node {
         #[serde(flatten)]
         extra: ExtraMap,
     },
+    #[serde(rename = "page_break")]
+    PageBreak {
+        id: String,
+        #[serde(flatten)]
+        extra: ExtraMap,
+    },
     #[serde(rename = "math_block")]
     MathBlock {
         id: String,

@@ -75,12 +75,17 @@ pub fn cmd_history(path: &Path, as_json: bool) -> i32 {
             _ => "",
         };
         println!(
-            "* {}  {}  {}:{}  {}{}",
+            "* {}  {}  {}:{}  {}{}{}",
             e.id,
             e.timestamp.as_deref().unwrap_or("?"),
             e.author_type,
             e.author_id.as_deref().unwrap_or("-"),
             e.message,
+            if e.theme_sha256.is_some() {
+                "（含主题快照）"
+            } else {
+                ""
+            },
             flags
         );
         if let Some(p) = &e.parent {
@@ -153,9 +158,10 @@ pub fn cmd_checkout(path: &Path, rev: &str, out: Option<&Path>) -> i32 {
         return 0;
     }
 
-    if let Err(e) = c.checkout(rev) {
-        return die(e);
-    }
+    let info = match c.checkout(rev) {
+        Ok(i) => i,
+        Err(e) => return die(e),
+    };
 
     // 标注自动重定位
     let stats = match relocate_annotations_layer(&mut c) {
@@ -172,6 +178,10 @@ pub fn cmd_checkout(path: &Path, rev: &str, out: Option<&Path>) -> i32 {
         return 1;
     }
     println!("已切换到修订 {rev}（content 与快照一致；ID 原样保留）");
+    if !info.theme_restored {
+        // §5.3：旧修订无表现层快照——如实提示，不伪造主题
+        println!("提示：该修订未记录表现层主题快照（仅正文历史），当前主题保持不变");
+    }
     if let Some(s) = stats {
         println!(
             "标注重定位: 未变 {} · 重锚 {} · 迁移 {} · 失配 {}",

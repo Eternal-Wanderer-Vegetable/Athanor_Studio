@@ -18,6 +18,11 @@
 //! v1 只做快照模式：`commit` 把当前 content 落为 `revisions/<rev_id>/content.json`
 //! 并推进 `chain.head`；`checkout` 把 content 还原为某快照（ID 原样保留）；
 //! 资产不可变（R7），快照无需复制资产。
+//!
+//! §5.3 表现层修订快照（可选）：commit 时若 `presentation/theme.json` 存在，
+//! 同步落 `revisions/<rev_id>/theme.json` 完整副本并在链条目携带
+//! `theme_path`/`theme_sha256`（成员名冻结）；旧修订无此文件属正常历史形态，
+//! checkout 时未携带即视为仅正文历史（表现层不落，提示而非伪造）。
 
 use crate::builder::{rfc3339_now, sha256_hex};
 use crate::{Container, ContainerError};
@@ -25,6 +30,7 @@ use azodoc_model::id::{AzodocId, IdKind};
 use serde_json::{json, Map, Value};
 
 pub const CHAIN_PATH: &str = "revisions/chain.json";
+pub const THEME_ENTRY: &str = "presentation/theme.json";
 pub const AUTHOR_TYPES: &[&str] = &["human", "ai", "importer", "converter", "system"];
 
 pub struct CommitInfo<'a> {
@@ -43,6 +49,15 @@ pub struct HistoryEntry {
     pub message: String,
     pub is_head: bool,
     pub is_current: bool,
+    /// §5.3 表现层快照 sha256（None = 仅正文历史）。
+    pub theme_sha256: Option<String>,
+}
+
+/// `checkout` 的结果描述（§5.3：表现层快照存在与否须如实报告）。
+#[derive(Debug, Clone)]
+pub struct CheckoutInfo {
+    /// 该修订是否携带表现层快照并已还原到 `presentation/theme.json`。
+    pub theme_restored: bool,
 }
 
 fn parse_json(bytes: &[u8]) -> Result<Value, ContainerError> {
@@ -143,6 +158,20 @@ impl Container {
             entry["changes"] = Value::Object(changes);
         }
 
+        // §5.3 表现层修订快照：当前容器有 theme 层则落完整副本
+        // （完整副本非 diff；与父修订主题一致仍各存一份，保证 theme_path
+        // 恒指向本修订的独立快照，撤销顺序无关）。
+        let theme_snapshot =
+            if self.has_entry(THEME_ENTRY) || self.modified.contains_key(THEME_ENTRY) {
+                let theme_bytes = self.read_entry(THEME_ENTRY)?;
+                let theme_path = format!("revisions/{rev_id}/theme.json");
+                entry["theme_path"] = json!(theme_path);
+                entry["theme_sha256"] = json!(sha256_hex(&theme_bytes));
+                Some((theme_path, theme_bytes))
+            } else {
+                None
+            };
+
         let mut new_chain = match chain {
             Some(mut c) => {
                 c["head"] = json!(rev_id);
@@ -180,6 +209,9 @@ impl Container {
         };
 
         self.set_entry(&snapshot_path, content_bytes)?;
+        if let Some((theme_path, theme_bytes)) = theme_snapshot {
+            self.set_entry(&theme_path, theme_bytes)?;
+        }
         self.set_entry(CHAIN_PATH, chain_bytes)?;
 
         // manifest：推进 current_revision、注册 revisions 层、刷新缓存绑定
@@ -212,28 +244,50 @@ impl Container {
     }
 
     /// 把 content.json 还原为某修订的快照（ID 原样保留）。
+    /// §5.3：条目携带 `theme_path`/`theme_sha256` 时同步还原
+    /// `presentation/theme.json`；未携带（旧修订）表现层原样保留，
+    /// `CheckoutInfo.theme_restored = false` 由调用方提示"仅正文历史"。
     /// 兼容缓存标记为 stale（其内容描述的是还原前的文档），由 upgrade 重建。
-    pub fn checkout(&mut self, rev_id: &str) -> Result<(), ContainerError> {
+    pub fn checkout(&mut self, rev_id: &str) -> Result<CheckoutInfo, ContainerError> {
         let chain = self
             .chain()?
             .ok_or_else(|| ContainerError::Manifest("容器没有修订链".to_string()))?;
-        let exists = chain
+        let rev_entry = chain
             .get("revisions")
             .and_then(Value::as_array)
-            .map(|a| {
+            .and_then(|a| {
                 a.iter()
-                    .any(|r| r.get("id").and_then(Value::as_str) == Some(rev_id))
-            })
-            .unwrap_or(false);
-        if !exists {
+                    .find(|r| r.get("id").and_then(Value::as_str) == Some(rev_id))
+                    .cloned()
+            });
+        let Some(rev_entry) = rev_entry else {
             return Err(ContainerError::Manifest(format!("修订不存在: {rev_id}")));
-        }
+        };
         let ppath = format!("revisions/{rev_id}/content.json");
         if !self.has_entry(&ppath) {
             return Err(ContainerError::Manifest(format!("修订快照缺失: {ppath}")));
         }
         let bytes = self.read_entry(&ppath)?;
         self.set_entry("document/content.json", bytes)?;
+
+        // §5.3：表现层快照存在时还原（sha256 由 verify 兜底；这里信任链中
+        // 声明的路径，还原失败按容器错误上抛而非伪造主题）。
+        let mut theme_restored = false;
+        if let Some(theme_path) = rev_entry.get("theme_path").and_then(Value::as_str) {
+            let theme_bytes = self.read_entry(theme_path)?;
+            self.set_entry(THEME_ENTRY, theme_bytes)?;
+            // 同步 manifest 的 presentation 层登记（sha256 刷新）
+            let theme_sha = sha256_hex(&self.read_entry(THEME_ENTRY)?);
+            let mut manifest = self.manifest_value().clone();
+            if let Some(layers) = manifest.get_mut("layers").and_then(Value::as_object_mut) {
+                layers.insert(
+                    "presentation".to_string(),
+                    json!({"path": THEME_ENTRY, "sha256": theme_sha}),
+                );
+            }
+            self.set_manifest(manifest)?;
+            theme_restored = true;
+        }
 
         let mut manifest = self.manifest_value().clone();
         manifest["current_revision"] = json!(rev_id);
@@ -246,7 +300,7 @@ impl Container {
             }
         }
         self.set_manifest(manifest)?;
-        Ok(())
+        Ok(CheckoutInfo { theme_restored })
     }
 
     /// 修订链条目（旧 → 新）。
@@ -289,6 +343,10 @@ impl Container {
                         .to_string(),
                     is_head: head.as_deref() == r.get("id").and_then(Value::as_str),
                     is_current: current.as_deref() == r.get("id").and_then(Value::as_str),
+                    theme_sha256: r
+                        .get("theme_sha256")
+                        .and_then(Value::as_str)
+                        .map(String::from),
                 });
             }
         }

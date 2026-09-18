@@ -32,7 +32,11 @@ export interface DocResponse {
     timestamp: string | null;
     is_current: boolean;
     is_head: boolean;
+    /** §5.3：该修订的表现层快照 sha256；缺失 = 仅正文历史。 */
+    theme_sha256?: string | null;
   }[];
+  /** checkout 响应附带：该修订是否还原了表现层主题。 */
+  theme_restored?: boolean;
   warnings: string[];
   loss_summary: {
     unknown_blocks: Record<string, unknown>[];
@@ -66,7 +70,15 @@ export interface JobSnapshot {
   phase: string;
   progress: number;
   session_id?: string | null;
-  result?: { output?: string; document?: string; report?: { summary?: { loss?: Record<string, number> } } };
+  result?: {
+    output?: string;
+    document?: string;
+    report?: {
+      target?: { revision?: string };
+      capabilities?: { matrix_version?: string; counts?: Record<string, number> };
+      summary?: { loss?: Record<string, number> };
+    };
+  };
   error?: { code: string; message: string };
 }
 
@@ -134,6 +146,8 @@ export interface DocumentGateway {
   verifyDocument(sessionId: string): Promise<Record<string, unknown>>;
   /** 印刷预览：对当前 PM 快照产出 Paged.js 增强 HTML + 快照指纹（不出版）。 */
   renderPreview(sessionId: string, body: Record<string, unknown>): Promise<PreviewResult>;
+  /** 还原到某修订快照；返回重开的 DocResponse + theme_restored。 */
+  checkoutRevision(sessionId: string, body: Record<string, unknown>): Promise<DocResponse>;
 
   // ---- 文件对话框（HTTP 模式抛 unsupported）----
   pickOpen(): Promise<string | null>;

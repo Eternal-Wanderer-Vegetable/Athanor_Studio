@@ -25,7 +25,10 @@ export function setMsg(text: string, ok: boolean): void {
   el.className = ok ? "ok" : "bad";
 }
 
-export function renderSidebar(d: DocResponse): void {
+export function renderSidebar(
+  d: DocResponse,
+  onCheckout?: (revId: string) => void,
+): void {
   $("doc-path").textContent = d.path ?? "未命名文档";
   $("rev").textContent = d.revision ?? "（未保存过）";
 
@@ -39,12 +42,26 @@ export function renderSidebar(d: DocResponse): void {
         const tag = document.createElement("span");
         tag.className = `tag tag--${e.author_type}`;
         tag.textContent = e.author_type;
+        // §5.3：主题快照标记（无 = 仅正文历史）
+        const themeMark = e.theme_sha256 ? " ◈" : "";
         li.append(
           tag,
           document.createTextNode(
-            ` ${e.id} · ${e.message || "（无说明）"}${e.is_current ? " ⟵当前" : ""}`,
+            ` ${e.id} · ${e.message || "（无说明）"}${themeMark}${e.is_current ? " ⟵当前" : ""}`,
           ),
         );
+        if (onCheckout && !e.is_current) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "hist-restore";
+          btn.dataset.rev = e.id;
+          btn.title = e.theme_sha256
+            ? "还原到此修订（含主题快照）"
+            : "还原到此修订（该修订无主题快照，仅正文历史）";
+          btn.textContent = "还原";
+          btn.addEventListener("click", () => onCheckout(e.id));
+          li.append(btn);
+        }
         return li;
       }),
   );

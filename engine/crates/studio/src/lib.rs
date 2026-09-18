@@ -83,6 +83,7 @@ pub fn run() {
             commands::save_document_as,
             commands::close_document,
             commands::preview_document,
+            commands::checkout_revision,
             commands::stage_asset,
             commands::read_asset,
             commands::verify_document,
