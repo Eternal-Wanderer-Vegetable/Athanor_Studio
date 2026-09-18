@@ -36,6 +36,8 @@ export interface MenusDeps {
 
 export class AppMenus {
   private triggers = new Map<MenuGroup, HTMLButtonElement>();
+  private moreBtn: HTMLButtonElement | null = null;
+  private overflowedGroups: MenuGroup[] = [];
 
   constructor(private deps: MenusDeps) {}
 
@@ -56,15 +58,86 @@ export class AppMenus {
       bar.appendChild(btn);
       this.triggers.set(g.id, btn);
     }
+    const more = el("button", "menu-group menu-more") as HTMLButtonElement;
+    more.type = "button";
+    more.id = "menu-more";
+    more.textContent = "更多 ▾";
+    more.title = "更多菜单";
+    more.style.display = "none";
+    more.addEventListener("click", () => this.openMore(more));
+    bar.appendChild(more);
+    this.moreBtn = more;
+    window.addEventListener("resize", () => this.applyMenuOverflow());
   }
 
   /** 能力不可用的菜单组整体隐藏（如 HTTP 模式没有文件对话框能力时文件菜单收窄）。 */
   refresh(): void {
+    this.applyMenuOverflow();
+  }
+
+  /** 菜单条宽度不足时低优先级菜单组收进“更多”下拉（与 ribbon 溢出同规则）。
+   *  先按能力恢复全部可见组再收溢出——resize/refresh 共用此路径。 */
+  private applyMenuOverflow(): void {
+    const bar = $("app-menus");
+    const more = this.moreBtn;
+    if (!more) return;
     const ctx = this.deps.ctx();
     for (const [group, btn] of this.triggers) {
       const visible = this.deps.registry.byMenu(group, ctx).length > 0;
       btn.style.display = visible ? "" : "none";
     }
+    const visibleGroups = MENU_GROUPS
+      .map((g) => this.triggers.get(g.id))
+      .filter((b): b is HTMLButtonElement => !!b && b.style.display !== "none");
+    this.overflowedGroups = [];
+    // 先全部展开测量
+    visibleGroups.forEach((b) => (b.dataset.overflowed = ""));
+    more.style.display = "none";
+    const available = bar.clientWidth - 8;
+    const widths = visibleGroups.map((b) => b.offsetWidth);
+    let used = widths.reduce((s, w) => s + w, 0);
+    const reserve = 76;
+    // 窄屏（<900px）：低优先级菜单组（插入/视图/文档检查）直接进入“更多”
+    const narrow = window.innerWidth < 900;
+    const hide = (btn: HTMLButtonElement, i: number) => {
+      btn.dataset.overflowed = "true";
+      btn.style.display = "none";
+      used -= widths[i];
+      this.overflowedGroups.unshift(btn.dataset.menuGroup as MenuGroup);
+    };
+    if (narrow) {
+      const LOW_PRIORITY: MenuGroup[] = ["insert", "view", "review"];
+      for (let i = visibleGroups.length - 1; i >= 0; i--) {
+        const g = visibleGroups[i].dataset.menuGroup as MenuGroup;
+        if (LOW_PRIORITY.includes(g)) hide(visibleGroups[i], i);
+      }
+    }
+    // 宽度仍不足时从最后一个可见菜单组继续收（保持“文件”最高优先级）
+    for (let i = visibleGroups.length - 1; i >= 0 && used + reserve > available; i--) {
+      const btn = visibleGroups[i];
+      if (btn.dataset.overflowed === "true") continue;
+      hide(btn, i);
+    }
+    more.style.display = this.overflowedGroups.length ? "" : "none";
+  }
+
+  private openMore(anchor: HTMLButtonElement): void {
+    const menu = el("div", "az-menu menubar-more-menu");
+    menu.setAttribute("role", "menu");
+    menu.dataset.menuGroup = this.overflowedGroups[0] ?? "file";
+    const ctx = this.deps.ctx();
+    for (const g of this.overflowedGroups) {
+      const label = MENU_GROUPS.find((x) => x.id === g)?.label ?? g;
+      menu.appendChild(el("div", "group-title", label));
+      for (const cmd of this.deps.registry.byMenu(g, ctx)) {
+        menu.appendChild(this.item(cmd));
+      }
+    }
+    const r = anchor.getBoundingClientRect();
+    menu.style.left = `${Math.max(4, r.left)}px`;
+    menu.style.top = `${r.bottom + 2}px`;
+    menu.addEventListener("keydown", (e) => this.onMenuKeydown(e, menu));
+    this.deps.overlays.show(menu, { restoreFocus: anchor, anchors: [anchor] });
   }
 
   private toggle(group: MenuGroup, trigger: HTMLButtonElement): void {

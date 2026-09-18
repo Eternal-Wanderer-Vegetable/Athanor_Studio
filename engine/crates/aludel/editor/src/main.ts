@@ -274,19 +274,29 @@ reg("edit.replace", "替换", () => toggleFindBar(true, true), {
 
 // ---- 字符格式（开始/浮动条共用投影） ----
 const FLOATING: import("./app/command-registry").CommandSurface[] = ["floating"];
-reg("format.font", "字体", () => {}, {
+/** 参数化格式命令（字体/字号/颜色/高亮）：菜单/面板触发打开 picker，
+ *  不执行空 run（命令矩阵 §5）。 */
+function openPicker(pickerId: string): void {
+  ribbon.activateTab("home");
+  setTimeout(() => {
+    const ctl = document.getElementById(pickerId) as HTMLElement | null;
+    ctl?.focus();
+    if (ctl instanceof HTMLSelectElement) ctl.click();
+  }, 0);
+}
+reg("format.font", "字体", () => openPicker("tb-font"), {
   tab: "home", group: "字体", groupOrder: 20, surfaces: ["ribbon", "palette", ...FLOATING],
   focusPolicy: "keep", keywords: ["font", "ziti"],
 });
-reg("format.size", "字号", () => {}, {
+reg("format.size", "字号", () => openPicker("tb-size"), {
   tab: "home", group: "字体", groupOrder: 20, surfaces: ["ribbon", "palette", ...FLOATING],
   focusPolicy: "keep", keywords: ["size", "zihao"],
 });
-reg("format.color", "文字颜色", () => {}, {
+reg("format.color", "文字颜色", () => openPicker("tb-color"), {
   tab: "home", group: "字体", groupOrder: 20, surfaces: ["ribbon", "palette", ...FLOATING],
   focusPolicy: "keep", keywords: ["color", "yanse"],
 });
-reg("format.highlight", "高亮", () => {}, {
+reg("format.highlight", "高亮", () => openPicker("tb-highlight"), {
   tab: "home", group: "字体", groupOrder: 20, surfaces: ["ribbon", "palette", ...FLOATING],
   focusPolicy: "keep", keywords: ["highlight", "gaoliang"],
 });

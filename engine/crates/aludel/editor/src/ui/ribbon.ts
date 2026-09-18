@@ -131,6 +131,11 @@ export class Ribbon {
   private contextReturnTab: RibbonTab = "home";
   private lastInTable = false;
 
+  /** 程序化选中页签（picker 命令/测试可达；上下文页签按可见性校验）。 */
+  activateTab(tab: RibbonTab): void {
+    this.selectTab(tab);
+  }
+
   /** 折叠/展开功能区（view.ribbonCollapse 命令与 ▴ 按钮共用）。 */
   toggleCollapse(): void {
     this.collapsed = !this.collapsed;
@@ -265,7 +270,10 @@ export class Ribbon {
         it.setAttribute("role", "menuitem");
         it.style.display = "flex";
         it.style.width = "100%";
-        it.addEventListener("click", () => this.deps.overlays.close(false));
+        it.addEventListener("click", () => {
+          this.deps.overlays.close(false);
+          this.deps.runCommand(cmd.id, it);
+        });
         menu.appendChild(it);
       }
     }
