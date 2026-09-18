@@ -1,1 +1,1 @@
-{}
+{"main":{"identifier":"main","description":"主窗口能力：核心默认值 + 原生文件对话框","local":true,"windows":["main"],"permissions":["core:default","dialog:default"]}}

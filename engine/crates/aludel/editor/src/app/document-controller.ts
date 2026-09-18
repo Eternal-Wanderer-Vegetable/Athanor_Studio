@@ -1,0 +1,576 @@
+// This file is part of Athanor, the Azodoc document engine.
+// Copyright (C) 2026 The Athanor Studio Developers
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, version 3 of the License only.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+//! 编辑会话控制器：EditorView 生命周期、dirty 判定、保存编排、
+//! 恢复草稿与任务回调。ProseMirror state 是正文唯一权威。
+
+import { EditorState, Transaction } from "prosemirror-state";
+import { EditorView } from "prosemirror-view";
+import { baseKeymap } from "prosemirror-commands";
+import { keymap } from "prosemirror-keymap";
+import { history, undo, redo } from "prosemirror-history";
+import type { Node as PMNode } from "prosemirror-model";
+import { schema } from "../schema";
+import type { DocumentGateway, DocResponse, JobRequest, JobSnapshot, SaveResult } from "../platform/gateway";
+import { SessionStore } from "./session-store";
+
+export interface ControllerHooks {
+  /** 状态栏/标题/按钮刷新。 */
+  onStateChange(): void;
+  /** 侧栏元数据刷新（历史/标注/损失）。 */
+  onDocMeta(d: DocResponse): void;
+  /** 消息条。 */
+  onMessage(text: string, ok: boolean): void;
+  /** 大纲刷新。 */
+  onOutline(headings: { level: number; text: string; pos: number }[]): void;
+  /** 当前页字数统计等。 */
+  onStats(chars: number): void;
+}
+
+const RECOVERY_DEBOUNCE_MS = 2_000;
+
+export class DocumentController {
+  view: EditorView | null = null;
+  readonly store = new SessionStore();
+  private gateway: DocumentGateway;
+  private hooks: ControllerHooks;
+  private host: HTMLElement;
+  /** 保存基线文档（保存/打开确认的快照）。 */
+  private baseline: PMNode | null = null;
+  /** 是否处于 IME 组合输入。 */
+  composing = false;
+  private recoveryTimer: ReturnType<typeof setTimeout> | null = null;
+  private recoveryGeneration = 0;
+
+  constructor(host: HTMLElement, gateway: DocumentGateway, hooks: ControllerHooks) {
+    this.host = host;
+    this.gateway = gateway;
+    this.hooks = hooks;
+  }
+
+  get doc(): PMNode | null {
+    return this.view?.state.doc ?? null;
+  }
+
+  /** 脏标记 = 当前 doc 与保存基线结构不等价（selection/滚动不触发）。 */
+  private recomputeDirty(): void {
+    if (!this.view || !this.baseline) return;
+    this.store.setDirty(!this.view.state.doc.eq(this.baseline));
+  }
+
+  // ---------------------------------------------------------------- 挂载
+
+  private createEditor(docJson: Record<string, unknown>): EditorView {
+    const doc = schema.nodeFromJSON(docJson);
+    return new EditorView(this.host, {
+      state: EditorState.create({
+        doc,
+        plugins: [
+          keymap({ "Mod-z": undo, "Shift-Mod-z": redo, "Mod-y": redo }),
+          keymap(baseKeymap),
+          history(),
+        ],
+      }),
+      attributes: { spellcheck: "false" },
+      handleDoubleClickOn: (v, _pos, node, nodePos) => {
+        if (node.type.name !== "math_block" && node.type.name !== "inline_math") return false;
+        const current = String(node.attrs.latex ?? "");
+        const next = window.prompt("LaTeX 源码：", current);
+        if (next === null) return true;
+        v.dispatch(v.state.tr.setNodeAttribute(nodePos, "latex", next));
+        return true;
+      },
+      handleDOMEvents: {
+        mousedown: (v, event) => {
+          const t = event.target as HTMLElement | null;
+          if (!t || !t.matches?.("li[data-checked]")) return false;
+          const $pos = v.state.doc.resolve(v.posAtDOM(t, 0));
+          for (let depth = $pos.depth; depth > 0; depth--) {
+            const n = $pos.node(depth);
+            if (n.type.name === "list_item") {
+              const pos = $pos.before(depth);
+              v.dispatch(v.state.tr.setNodeAttribute(pos, "checked", !n.attrs.checked));
+              return true;
+            }
+          }
+          return false;
+        },
+        compositionstart: () => {
+          this.composing = true;
+          return false;
+        },
+        compositionend: () => {
+          this.composing = false;
+          this.refreshDerivedUI();
+          return false;
+        },
+      },
+      dispatchTransaction: (tr: Transaction) => {
+        const view = this.view;
+        if (!view) return;
+        view.updateState(view.state.apply(tr));
+        if (tr.docChanged) {
+          this.store.markEdited();
+          this.recomputeDirty();
+          this.scheduleRecovery();
+        }
+        this.refreshDerivedUI();
+      },
+    });
+  }
+
+  /** 挂载一份文档（打开/新建/恢复）。epoch 推进使旧异步响应作废。 */
+  mount(result: { sessionId: string; doc: DocResponse }, displayName?: string): void {
+    const d = result.doc;
+    this.store.open({
+      sessionId: result.sessionId,
+      path: d.path,
+      revision: d.revision,
+      fingerprint: d.fingerprint,
+      displayName,
+    });
+    this.view?.destroy();
+    this.view = this.createEditor(d.pm_doc);
+    this.baseline = this.view.state.doc;
+    this.store.setDirty(false);
+    this.hooks.onDocMeta(d);
+    this.refreshDerivedUI();
+  }
+
+  /** 挂载一份尚未保存的 PM 内容（恢复草稿用）。 */
+  mountRecovered(pmDoc: Record<string, unknown>, originPath: string | null): void {
+    this.store.open({
+      sessionId: `recovery-${Date.now()}`,
+      path: originPath,
+      revision: null,
+      fingerprint: null,
+    });
+    this.view?.destroy();
+    this.view = this.createEditor(pmDoc);
+    this.baseline = null; // 恢复内容未落盘：恒脏
+    this.store.setDirty(true);
+    this.refreshDerivedUI();
+  }
+
+  /** 无文档时清空视图。 */
+  unmount(): void {
+    this.view?.destroy();
+    this.view = null;
+    this.baseline = null;
+    this.store.state = { ...this.store.state, sessionId: "", path: null };
+    this.refreshDerivedUI();
+  }
+
+  // ---------------------------------------------------------------- 刷新
+
+  /** 派生 UI：大纲/字数/标题/命令态。IME 组合期间只刷状态条。 */
+  refreshDerivedUI(): void {
+    if (!this.composing && this.view) {
+      this.hooks.onOutline(collectHeadings(this.view.state.doc));
+      this.hooks.onStats(countChars(this.view.state.doc));
+    }
+    this.hooks.onStateChange();
+  }
+
+  // ---------------------------------------------------------------- 打开/新建/关闭
+
+  /** 未保存改动确认（true=继续放弃/另存，false=取消）。 */
+  async confirmDiscardIfDirty(): Promise<boolean> {
+    if (!this.store.state.dirty) return true;
+    return this.gateway.confirm(
+      `「${this.store.state.displayName}」有未保存的更改，继续操作将丢失这些内容。`,
+      "未保存的更改",
+    );
+  }
+
+  async openPath(path: string): Promise<boolean> {
+    const epoch = this.store.currentEpoch();
+    try {
+      const result = await this.gateway.openDocument(path);
+      if (epoch !== this.store.currentEpoch() && this.store.state.sessionId !== "") {
+        // 已有新会话接管：丢弃过期响应
+        return false;
+      }
+      this.mount(result);
+      this.hooks.onMessage("文档已打开。", true);
+      return true;
+    } catch (e) {
+      this.hooks.onMessage(`打开失败: ${errText(e)}`, false);
+      return false;
+    }
+  }
+
+  async pickAndOpen(): Promise<void> {
+    if (!(await this.confirmDiscardIfDirty())) return;
+    const path = await this.gateway.pickOpen();
+    if (!path) return;
+    await this.openPath(path);
+  }
+
+  async newDocument(): Promise<void> {
+    if (!(await this.confirmDiscardIfDirty())) return;
+    try {
+      const result = await this.gateway.newDocument();
+      this.mount(result);
+      this.hooks.onMessage("已创建新文档，直接输入即可。", true);
+      this.view?.focus();
+    } catch (e) {
+      this.hooks.onMessage(`新建失败: ${errText(e)}`, false);
+    }
+  }
+
+  async closeDocument(): Promise<void> {
+    if (!(await this.confirmDiscardIfDirty())) return;
+    const id = this.store.state.sessionId;
+    if (id && this.gateway.desktop) {
+      try {
+        await this.gateway.closeDocument(id);
+        await this.gateway.deleteRecovery(id).catch(() => {});
+      } catch {
+        /* 关闭失败不阻塞 UI */
+      }
+    }
+    this.unmount();
+    this.hooks.onMessage("文档已关闭。", true);
+  }
+
+  // ---------------------------------------------------------------- 保存
+
+  /** 捕获当前快照并保存；在途时排队。 */
+  async requestSave(): Promise<void> {
+    if (!this.view) return;
+    if (!this.store.requestSave()) return; // 已在途：saveQueued 已置位
+    await this.performSave();
+  }
+
+  private async performSave(): Promise<void> {
+    const view = this.view;
+    if (!view) return;
+    const s = this.store.state;
+    const snapshot = view.state.doc;
+    const epoch = s.epoch;
+    const sessionId = s.sessionId;
+    const body = {
+      pm_doc: snapshot.toJSON(),
+      message: (document.getElementById("message") as HTMLInputElement | null)?.value.trim() || undefined,
+      author_id: "local",
+      expected_fingerprint: s.fingerprint ?? undefined,
+    };
+    this.hooks.onMessage("保存中…", true);
+    this.hooks.onStateChange();
+    try {
+      let result;
+      if (s.path === null && this.gateway.desktop) {
+        // 未命名文档：先选路径
+        const target = await this.gateway.pickSaveAs("未命名文档.azodoc");
+        if (!target) {
+          this.store.saveFailed();
+          this.store.state.saveState = "idle";
+          this.hooks.onMessage("已取消保存（未选择路径）。", true);
+          this.hooks.onStateChange();
+          return;
+        }
+        const r = await this.gateway.saveDocumentAs(sessionId, target, false, body);
+        if (r.session_id) this.store.state.sessionId = r.session_id;
+        result = r.doc ?? r;
+      } else {
+        result = await this.gateway.saveDocument(sessionId, body);
+      }
+      if (epoch !== this.store.currentEpoch()) return; // 过期响应丢弃
+      if (result.ok === false) throw new Error(result.error ?? "保存被拒绝");
+      this.baseline = snapshot;
+      this.store.saveSucceeded(
+        result.fingerprint ?? null,
+        result.revision ?? null,
+        result.path !== undefined ? result.path : undefined,
+      );
+      this.recomputeDirty();
+      // 落链元数据刷新（不重建 view，保护光标）
+      const rel = result.relocate;
+      const relText = rel
+        ? ` · 标注 未变${rel.unchanged}/重锚${rel.reanchored}/迁移${rel.moved}/失配${rel.detached}`
+        : "";
+      this.hooks.onMessage(
+        `已保存 ${result.revision ?? ""}${relText}`,
+        true,
+      );
+      await this.gateway.deleteRecovery(sessionId).catch(() => {});
+      if (this.store.consumeQueuedSave()) void this.requestSave();
+    } catch (e) {
+      if (epoch !== this.store.currentEpoch()) return;
+      this.store.saveFailed();
+      const msg = errText(e);
+      if (msg.includes("target_exists") || msg.includes("已存在")) {
+        this.hooks.onMessage(`另存失败：目标已存在。`, false);
+      } else if (msg.includes("外部")) {
+        this.hooks.onMessage(`${msg}`, false);
+      } else {
+        this.hooks.onMessage(`保存失败: ${msg}`, false);
+      }
+      if (this.store.consumeQueuedSave()) void this.requestSave();
+    } finally {
+      this.hooks.onStateChange();
+    }
+  }
+
+  async saveAs(): Promise<void> {
+    const view = this.view;
+    if (!view || !this.gateway.desktop) return;
+    const target = await this.gateway.pickSaveAs(this.store.state.displayName);
+    if (!target) return;
+    const s = this.store.state;
+    const body = {
+      pm_doc: view.state.doc.toJSON(),
+      message: undefined,
+      author_id: "local",
+    };
+    const apply = (result: SaveResult) => {
+      if (result.session_id) this.store.state.sessionId = result.session_id;
+      const doc = result.doc ?? result;
+      this.baseline = view.state.doc;
+      this.store.saveSucceeded(doc.fingerprint ?? null, doc.revision ?? null, target);
+      this.recomputeDirty();
+      this.hooks.onMessage(`已另存为 ${target}`, true);
+      this.hooks.onStateChange();
+    };
+    try {
+      apply(await this.gateway.saveDocumentAs(s.sessionId, target, false, body));
+    } catch (e) {
+      const msg = errText(e);
+      if (msg.includes("target_exists") || msg.includes("已存在")) {
+        const yes = await this.gateway.confirm(`「${target}」已存在，要覆盖吗？`, "另存为");
+        if (!yes) return;
+        try {
+          apply(await this.gateway.saveDocumentAs(s.sessionId, target, true, body));
+        } catch (e2) {
+          this.hooks.onMessage(`另存失败: ${errText(e2)}`, false);
+        }
+      } else {
+        this.hooks.onMessage(`另存失败: ${msg}`, false);
+      }
+    }
+    this.hooks.onStateChange();
+  }
+
+  async verify(): Promise<void> {
+    const s = this.store.state;
+    this.hooks.onMessage("文档检查中…", true);
+    try {
+      const data = await this.gateway.verifyDocument(s.sessionId);
+      this.hooks.onMessage(
+        data["ok"] === true ? "文档检查通过 ✓" : "文档检查未通过（详见服务端输出）",
+        data["ok"] === true,
+      );
+    } catch (e) {
+      this.hooks.onMessage(`检查失败: ${errText(e)}`, false);
+    }
+  }
+
+  // ---------------------------------------------------------------- 任务
+
+  /** 导出/出版固定为“先保存当前快照，再对该版本跑任务”。 */
+  async runJob(kind: "import" | "export" | "publish"): Promise<void> {
+    if (!this.gateway.desktop) {
+      this.hooks.onMessage("浏览器模式不支持后台任务。", false);
+      return;
+    }
+    const s = this.store.state;
+    if (s.activeJob !== null) {
+      this.hooks.onMessage("已有任务在运行。", false);
+      return;
+    }
+    if (kind === "import") {
+      if (!(await this.confirmDiscardIfDirty())) return;
+      const input = await this.gateway.pickImportSource();
+      if (!input) return;
+      const output = await this.gateway.pickSaveAs("导入结果.azodoc");
+      if (!output) return;
+      const epoch = this.store.currentEpoch();
+      try {
+        const jobId = await this.gateway.runJob(
+          { kind, input, output, reader: "auto" },
+          s.sessionId || null,
+          (snap) => this.onJobUpdate(snap, epoch),
+        );
+        this.store.setActiveJob(jobId);
+        this.hooks.onMessage(`任务 #${jobId} 已排队`, true);
+      } catch (e) {
+        this.hooks.onMessage(`任务无法启动: ${errText(e)}`, false);
+      }
+      this.hooks.onStateChange();
+      return;
+    }
+    // export/publish：先保存
+    if (s.dirty || s.path === null) {
+      await this.requestSave();
+      // 保存为异步编排；若仍在 saving 则提示重试
+      if (this.store.state.saveState === "saving" || this.store.state.dirty) {
+        this.hooks.onMessage("请先完成保存再导出。", false);
+        return;
+      }
+    }
+    const input = s.path;
+    if (!input) {
+      this.hooks.onMessage("请先保存文档再导出。", false);
+      return;
+    }
+    const output = await this.gateway.pickSaveAs(
+      kind === "publish" ? `${this.store.state.displayName}.pdf` : `${this.store.state.displayName}.md`,
+    );
+    if (!output) return;
+    const epoch = this.store.currentEpoch();
+    const request: JobRequest =
+      kind === "export"
+        ? { kind, input, output, format: "markdown" }
+        : { kind, input, output, noPaged: false };
+    try {
+      const jobId = await this.gateway.runJob(request, s.sessionId || null, (snap) =>
+        this.onJobUpdate(snap, epoch),
+      );
+      this.store.setActiveJob(jobId);
+      this.hooks.onMessage(`任务 #${jobId} 已排队（文档版本已固定）`, true);
+    } catch (e) {
+      this.hooks.onMessage(`任务无法启动: ${errText(e)}`, false);
+    }
+    this.hooks.onStateChange();
+  }
+
+  private onJobUpdate(snapshot: JobSnapshot, epoch: number): void {
+    if (epoch !== this.store.currentEpoch()) return;
+    const terminal = ["succeeded", "failed", "cancelled"].includes(snapshot.phase);
+    // 终态不能被晚到的 jobId 重置为运行中；只认属于当前会话的任务
+    if (snapshot.session_id && this.store.state.sessionId && snapshot.session_id !== this.store.state.sessionId) {
+      return;
+    }
+    this.store.setActiveJob(terminal ? null : snapshot.id);
+    if (snapshot.error) {
+      this.hooks.onMessage(`任务失败: ${snapshot.error.message}`, false);
+      this.hooks.onStateChange();
+      return;
+    }
+    const loss = snapshot.result?.report?.summary?.loss;
+    const lossText = loss ? ` · 损失 ${Object.values(loss).reduce((a, b) => a + b, 0)} 项` : "";
+    const labels: Record<string, string> = {
+      queued: "排队中",
+      running: "运行中",
+      cancelling: "取消中",
+      committing: "提交结果中",
+      succeeded: "已完成",
+      cancelled: "已取消",
+      failed: "失败",
+    };
+    this.hooks.onMessage(
+      `任务 #${snapshot.id} ${labels[snapshot.phase] ?? snapshot.phase} ${snapshot.progress}%${lossText}`,
+      snapshot.phase !== "failed",
+    );
+    // 导入完成后重新打开产物（epoch 守卫由 openPath 自己再做一次）
+    if (snapshot.phase === "succeeded" && snapshot.result?.document) {
+      const docPath = snapshot.result.document;
+      if (docPath !== this.store.state.path) void this.openPath(docPath);
+    }
+    this.hooks.onStateChange();
+  }
+
+  async cancelJob(): Promise<void> {
+    const id = this.store.state.activeJob;
+    if (id === null) return;
+    try {
+      await this.gateway.cancelJob(id);
+    } catch (e) {
+      this.hooks.onMessage(`取消失败: ${errText(e)}`, false);
+    }
+  }
+
+  // ---------------------------------------------------------------- 恢复草稿
+
+  private scheduleRecovery(): void {
+    if (!this.gateway.desktop) return;
+    this.recoveryGeneration = this.store.state.editGeneration;
+    if (this.recoveryTimer) clearTimeout(this.recoveryTimer);
+    this.recoveryTimer = setTimeout(() => void this.writeRecovery(), RECOVERY_DEBOUNCE_MS);
+  }
+
+  private async writeRecovery(): Promise<void> {
+    const view = this.view;
+    const s = this.store.state;
+    if (!view || !s.sessionId) return;
+    try {
+      await this.gateway.writeRecovery(s.sessionId, this.recoveryGeneration, view.state.doc.toJSON(), s.path);
+    } catch {
+      /* 草稿失败静默，不影响正文 */
+    }
+  }
+
+  /** 启动时检查恢复草稿；返回是否接管了内容。 */
+  async offerRecoveries(): Promise<void> {
+    if (!this.gateway.desktop) return;
+    let list;
+    try {
+      list = await this.gateway.listRecoveries();
+    } catch {
+      return;
+    }
+    for (const r of list) {
+      const label = r.session_path ?? "未命名文档";
+      const restore = await this.gateway.confirm(
+        `发现未保存的草稿「${label}」（${r.saved_at ?? "时间未知"}）。恢复它吗？选择“否”将丢弃草稿。`,
+        "恢复草稿",
+      );
+      if (restore) {
+        try {
+          const draft = await this.gateway.readRecovery(r.file);
+          const pmDoc = draft["pm_doc"] as Record<string, unknown> | undefined;
+          if (pmDoc) {
+            this.mountRecovered(pmDoc, r.session_path);
+            this.hooks.onMessage(`已恢复草稿「${label}」，请另存为或保存。`, true);
+            return;
+          }
+        } catch (e) {
+          this.hooks.onMessage(`草稿读取失败: ${errText(e)}`, false);
+        }
+      }
+      await this.gateway.deleteRecovery(r.file).catch(() => {});
+    }
+  }
+}
+
+// ---------------------------------------------------------------- 纯函数
+
+function collectHeadings(doc: PMNode): { level: number; text: string; pos: number }[] {
+  const out: { level: number; text: string; pos: number }[] = [];
+  doc.descendants((node, pos) => {
+    if (node.type.name === "heading") {
+      out.push({ level: Number(node.attrs.level) || 1, text: node.textContent, pos });
+      return false;
+    }
+    return true;
+  });
+  return out;
+}
+
+function countChars(doc: PMNode): number {
+  let n = 0;
+  doc.descendants((node) => {
+    if (node.isText) n += node.text?.length ?? 0;
+    return true;
+  });
+  return n;
+}
+
+export function errText(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === "object" && e !== null && "message" in e) return String((e as { message: unknown }).message);
+  return String(e);
+}

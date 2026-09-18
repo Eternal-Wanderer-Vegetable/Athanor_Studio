@@ -97,6 +97,8 @@ pub struct JobSnapshot {
     pub progress: u8,
     pub result: Option<Value>,
     pub error: Option<JobError>,
+    /// 任务所属的文档会话（可空；供前端区分结果归属）。
+    pub session_id: Option<String>,
 }
 
 struct Job {
@@ -152,7 +154,11 @@ pub struct JobManager {
 }
 
 impl JobManager {
-    fn reserve(&self, updates: Option<Channel<JobSnapshot>>) -> Result<Arc<Job>, JobError> {
+    fn reserve(
+        &self,
+        updates: Option<Channel<JobSnapshot>>,
+        session_id: Option<String>,
+    ) -> Result<Arc<Job>, JobError> {
         let mut current = self.current.lock().unwrap();
         let id = if let Some(previous) = current.as_ref() {
             let snapshot = previous.snapshot.lock().unwrap();
@@ -170,6 +176,7 @@ impl JobManager {
                 progress: 0,
                 result: None,
                 error: None,
+                session_id,
             }),
             updates,
         });
@@ -206,8 +213,9 @@ pub fn run_job(
     state: tauri::State<'_, JobManager>,
     request: JobRequest,
     on_update: Channel<JobSnapshot>,
+    session_id: Option<String>,
 ) -> Result<u64, JobError> {
-    let job = state.reserve(Some(on_update))?;
+    let job = state.reserve(Some(on_update), session_id)?;
     let id = job.snapshot.lock().unwrap().id;
     let gate = state.commit_gate.clone();
     let worker = job.clone();
@@ -433,7 +441,7 @@ mod tests {
     fn import_and_export_return_reports_without_changing_source() {
         let dir = tempfile::tempdir().unwrap();
         let (manager, request) = import_fixture(dir.path());
-        let job = manager.reserve(None).unwrap();
+        let job = manager.reserve(None, None).unwrap();
         let result = execute(&request, &job, &manager.commit_gate).unwrap();
         assert_eq!(result["report"]["direction"], "import");
         job.finish(Ok(result));
@@ -446,7 +454,7 @@ mod tests {
             ExportFormat::Docx,
         ] {
             let output = dir.path().join(format!("output-{format:?}"));
-            let job = manager.reserve(None).unwrap();
+            let job = manager.reserve(None, None).unwrap();
             let result = execute(
                 &JobRequest::Export {
                     input: input.clone(),
@@ -468,8 +476,8 @@ mod tests {
     fn cancellation_busy_and_commit_boundary_are_truthful() {
         let dir = tempfile::tempdir().unwrap();
         let (manager, request) = import_fixture(dir.path());
-        let job = manager.reserve(None).unwrap();
-        assert_eq!(manager.reserve(None).err().unwrap().code, "job_busy");
+        let job = manager.reserve(None, None).unwrap();
+        assert_eq!(manager.reserve(None, None).err().unwrap().code, "job_busy");
         assert!(manager.cancel(1).unwrap());
         let result = execute(&request, &job, &manager.commit_gate);
         assert_eq!(result.as_ref().unwrap_err().code, "cancelled");
@@ -477,7 +485,7 @@ mod tests {
         assert!(!dir.path().join("book.azodoc").exists());
         assert_eq!(job.snapshot.lock().unwrap().phase, Phase::Cancelled);
         assert!(!manager.cancel(1).unwrap());
-        let job = manager.reserve(None).unwrap();
+        let job = manager.reserve(None, None).unwrap();
         job.advance(Phase::Running, 10).unwrap();
         assert!(manager.cancel(2).unwrap());
         assert_eq!(
@@ -485,7 +493,7 @@ mod tests {
             "cancelled"
         );
         job.finish(Err(error("cancelled", "cancelled")));
-        let job = manager.reserve(None).unwrap();
+        let job = manager.reserve(None, None).unwrap();
         job.advance(Phase::Committing, 90).unwrap();
         assert!(!manager.cancel(3).unwrap());
     }
@@ -496,7 +504,7 @@ mod tests {
         let (manager, request) = import_fixture(dir.path());
         let output = dir.path().join("book.azodoc");
         fs::write(&output, "existing").unwrap();
-        let job = manager.reserve(None).unwrap();
+        let job = manager.reserve(None, None).unwrap();
         assert_eq!(
             execute(&request, &job, &manager.commit_gate)
                 .unwrap_err()

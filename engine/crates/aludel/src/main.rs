@@ -70,7 +70,12 @@ fn main() {
         .unwrap_or_else(|e| panic!("绑定 127.0.0.1:{port} 失败: {e}"));
     let addr = listener.local_addr().expect("listener 必有本地地址");
     println!("Aludel 编辑器（M6 原型）: http://{addr}");
-    println!("文档: {}", app.doc_path().display());
+    println!(
+        "文档: {}",
+        app.doc_path()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default()
+    );
     println!("Ctrl+C 退出。修订/标注信息也可用 athanor history/annotations 查看。");
 
     if !no_open {

@@ -419,7 +419,7 @@ fn route_handles_raw_request_struct() {
     let resp = route(&app, &req);
     assert_eq!(resp.status, 200);
     let html = String::from_utf8(resp.body).unwrap();
-    assert!(html.contains("ALUDEL"));
+    assert!(html.contains("Athanor"));
 }
 
 #[test]
@@ -429,6 +429,6 @@ fn document_session_facade_reuses_core_operations() {
 
     let opened = session.open().expect("session open 应复用核心实现");
     assert_eq!(opened["pm_doc"]["type"], "doc");
-    assert_eq!(session.doc_path(), doc.as_path());
-    assert_eq!(session.verify()["ok"], true);
+    assert_eq!(session.doc_path().as_deref(), Some(doc.as_path()));
+    assert_eq!(session.verify().unwrap()["ok"], true);
 }

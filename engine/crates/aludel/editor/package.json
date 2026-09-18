@@ -8,10 +8,12 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-dialog": "^2.0.0",
     "prosemirror-commands": "^1.7.0",
     "prosemirror-history": "^1.4.0",
     "prosemirror-keymap": "^1.2.0",
@@ -22,6 +24,7 @@
   "devDependencies": {
     "typescript": "~5.8.0",
     "vite": "^6.3.0",
-    "vite-plugin-singlefile": "^2.2.0"
+    "vite-plugin-singlefile": "^2.2.0",
+    "vitest": "^3.0.0"
   }
 }
