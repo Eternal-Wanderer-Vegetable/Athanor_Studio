@@ -26,6 +26,7 @@ import type { Node as PMNode } from "prosemirror-model";
 import { schema } from "../schema";
 import type { DocumentGateway, DocResponse, JobRequest, JobSnapshot, SaveResult } from "../platform/gateway";
 import { SessionStore } from "./session-store";
+import { askText } from "../ui/dialogs";
 
 export interface ControllerHooks {
   /** 状态栏/标题/按钮刷新。 */
@@ -93,12 +94,34 @@ export class DocumentController {
       handleDoubleClickOn: (v, _pos, node, nodePos) => {
         if (node.type.name !== "math_block" && node.type.name !== "inline_math") return false;
         const current = String(node.attrs.latex ?? "");
-        const next = window.prompt("LaTeX 源码：", current);
-        if (next === null) return true;
-        v.dispatch(v.state.tr.setNodeAttribute(nodePos, "latex", next));
+        void askText("LaTeX 源码", current).then((next) => {
+          if (next !== null && this.view === v) v.dispatch(v.state.tr.setNodeAttribute(nodePos, "latex", next));
+        });
         return true;
       },
       handleDOMEvents: {
+        paste: (v, event) => {
+          const clipboard = event.clipboardData;
+          const file = clipboard?.files?.[0];
+          if (!file || !file.type.startsWith("image/")) return false;
+          if (file.size > 10 * 1024 * 1024) {
+            this.hooks.onMessage("图片过大（上限 10 MB）。", false);
+            return true;
+          }
+          event.preventDefault();
+          const reader = new FileReader();
+          reader.onload = () => {
+            if (typeof reader.result !== "string" || this.view !== v) return;
+            const image = schema.nodes.image.create({
+              id: makeEditorId("blk"),
+              asset: reader.result,
+              alt: file.name,
+            });
+            v.dispatch(v.state.tr.replaceSelectionWith(image));
+          };
+          reader.readAsDataURL(file);
+          return true;
+        },
         mousedown: (v, event) => {
           const t = event.target as HTMLElement | null;
           if (!t || !t.matches?.("li[data-checked]")) return false;
@@ -589,6 +612,20 @@ function countChars(doc: PMNode): number {
     return true;
   });
   return n;
+}
+
+function makeEditorId(prefix: "blk"): string {
+  const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+  let time = BigInt(Date.now());
+  let suffix = "";
+  for (let i = 0; i < 10; i++) {
+    suffix = alphabet[Number(time & 31n)] + suffix;
+    time >>= 5n;
+  }
+  const bytes = new Uint8Array(16);
+  globalThis.crypto?.getRandomValues(bytes);
+  for (const byte of bytes) suffix += alphabet[byte & 31];
+  return `${prefix}_${suffix}`;
 }
 
 export function errText(e: unknown): string {

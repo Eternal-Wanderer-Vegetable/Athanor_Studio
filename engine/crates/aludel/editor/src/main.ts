@@ -37,6 +37,7 @@ import {
 import { TauriGateway } from "./platform/tauri";
 import { HttpGateway } from "./platform/http";
 import { $, renderOutline, renderSidebar, renderStatusBar, setMsg } from "./ui/panels";
+import { askText } from "./ui/dialogs";
 
 const tauriMode = "__TAURI_INTERNALS__" in window;
 const gateway = tauriMode ? new TauriGateway() : new HttpGateway();
@@ -212,11 +213,25 @@ reg("insert.table", "表格", () => {
 reg("insert.image", "图片", () => {
   const v = ctl.view;
   if (!v) return;
-  const asset = window.prompt("图片 URL 或 asset:// 引用：", "https://");
-  if (!asset) return;
-  const alt = window.prompt("替代文字（可选）：", "") ?? "";
-  const image = schema.nodes.image.create({ id: newId("blk"), asset, alt });
-  v.dispatch(v.state.tr.replaceSelectionWith(image));
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.onchange = () => {
+    const file = input.files?.[0];
+    if (!file || file.size > 10 * 1024 * 1024) {
+      if (file) setMsg("图片过大（上限 10 MB）。", false);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== "string" || ctl.view !== v) return;
+      const alt = window.prompt("替代文字（可选）：", file.name) ?? file.name;
+      v.dispatch(v.state.tr.replaceSelectionWith(schema.nodes.image.create({ id: newId("blk"), asset: reader.result, alt })));
+      v.focus();
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
 });
 reg("insert.rule", "分隔线", () => {
   const v = ctl.view;
@@ -230,10 +245,11 @@ reg("table.header", "切换表头", () => pmRun(toggleHeaderRow as never));
 reg("insert.math", "数学块", () => {
   const v = ctl.view;
   if (!v) return;
-  const latex = window.prompt("LaTeX 源码：", "E = mc^2");
-  if (latex === null) return;
-  const node = schema.nodes.math_block.create({ latex });
-  v.dispatch(v.state.tr.replaceSelectionWith(node));
+  void askText("LaTeX 源码", "E = mc^2").then((latex) => {
+    if (latex === null || ctl.view !== v) return;
+    v.dispatch(v.state.tr.replaceSelectionWith(schema.nodes.math_block.create({ latex })));
+    v.focus();
+  });
 });
 reg("job.import", "导入…", () => ctl.runJob("import"), { desktopOnly: true, needsDoc: false });
 reg("job.export", "导出 Markdown…", () => ctl.runJob("export"), { desktopOnly: true });

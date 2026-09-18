@@ -87,7 +87,7 @@ function paraFormatFromDom(dom: HTMLElement): ParagraphFormat {
  * 由 toDOM 渲染为占位框（真实资源解析属表现层/导出，编辑器内不假装能加载）。 */
 function assetUrl(asset: unknown): string | null {
   const s = typeof asset === "string" ? asset : "";
-  return /^https?:\/\//.test(s) ? s : null;
+  return /^(?:https?:\/\/|blob:|data:image\/)/.test(s) ? s : null;
 }
 
 /** 把 caption attr（Prima span JSON 数组）压平为纯文本（只读展示用）。 */
