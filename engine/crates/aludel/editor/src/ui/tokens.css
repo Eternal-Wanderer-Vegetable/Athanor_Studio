@@ -1,0 +1,68 @@
+/* Athanor shell design tokens —— 浅色/深色应用主题。
+   文档页面主题仍由 page theme（PageTheme）控制；这里的 token 只管应用界面。 */
+
+:root {
+  color-scheme: light;
+  --az-font-ui: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  --az-font-doc: "Cambria", "宋体", Georgia, serif;
+
+  --az-bg-app: #e9e5dc;
+  --az-bg-chrome: #f6f2e9;
+  --az-bg-chrome-2: #fdfaf2;
+  --az-bg-panel: #f4f0e6;
+  --az-bg-dark: #2c2620;
+  --az-fg: #2c2620;
+  --az-fg-dim: #7a6a52;
+  --az-fg-on-dark: #f6f4ef;
+  --az-fg-on-dark-dim: #d8d0c0;
+  --az-accent: #8c5a2b;
+  --az-accent-strong: #e8c36a;
+  --az-ok: #3d6b35;
+  --az-bad: #a33c2f;
+  --az-border: #ddd3bd;
+  --az-border-strong: #c9bfa8;
+  --az-hover: #ece4d2;
+  --az-active: #e3d9bf;
+  --az-active-border: #b8a77f;
+  --az-overlay: rgba(44, 38, 32, .35);
+  --az-focus: #8c5a2b;
+  --az-focus-on-dark: #e8c36a;
+  --az-shadow: 0 8px 30px rgba(0, 0, 0, .22);
+  --az-paper: #fff;
+
+  --az-topbar-h: 44px;
+  --az-tabbar-h: 32px;
+  --az-statusbar-h: 26px;
+  --az-rail-w: 44px;
+  --az-left-w: 240px;
+  --az-right-w: 300px;
+  --az-control-h: 30px;
+  --az-radius: 4px;
+  --az-gap: 4px;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --az-bg-app: #1d1a16;
+  --az-bg-chrome: #2a251f;
+  --az-bg-chrome-2: #312b23;
+  --az-bg-panel: #26221c;
+  --az-bg-dark: #171411;
+  --az-fg: #e8e2d4;
+  --az-fg-dim: #a99a80;
+  --az-fg-on-dark: #f6f4ef;
+  --az-fg-on-dark-dim: #cfc6b4;
+  --az-accent: #d8a35f;
+  --az-accent-strong: #e8c36a;
+  --az-ok: #9fc98f;
+  --az-bad: #e08a7c;
+  --az-border: #453d31;
+  --az-border-strong: #5a5040;
+  --az-hover: #3a332a;
+  --az-active: #453c2e;
+  --az-active-border: #8a7550;
+  --az-overlay: rgba(0, 0, 0, .5);
+  --az-focus: #d8a35f;
+  --az-focus-on-dark: #e8c36a;
+  --az-shadow: 0 8px 30px rgba(0, 0, 0, .5);
+}

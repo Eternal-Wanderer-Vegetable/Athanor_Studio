@@ -13,24 +13,22 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-//! 侧栏/大纲/状态栏渲染：纯 DOM 更新，不触碰编辑器状态。
+//! 文档检查面板（修订历史/语义标注/损失/警告）：DocResponse 的派生
+//! 视图，不持有也不写回文档状态；还原动作回调给 controller。
 
 import type { DocResponse } from "../platform/gateway";
+import { $ } from "./dom";
 
-export const $ = (id: string): HTMLElement => document.getElementById(id)!;
-
-export function setMsg(text: string, ok: boolean): void {
-  const el = $("msg");
-  el.textContent = text;
-  el.className = ok ? "ok" : "bad";
+export function renderDocMeta(d: DocResponse): void {
+  $("doc-path").textContent = d.path ?? "未命名文档";
+  $("rev").textContent = d.revision ?? "（未保存过）";
 }
 
-export function renderSidebar(
+export function renderReviewSections(
   d: DocResponse,
   onCheckout?: (revId: string) => void,
 ): void {
-  $("doc-path").textContent = d.path ?? "未命名文档";
-  $("rev").textContent = d.revision ?? "（未保存过）";
+  renderDocMeta(d);
 
   const history = $("history");
   history.replaceChildren(
@@ -107,50 +105,4 @@ export function renderSidebar(
         })
       : [Object.assign(document.createElement("li"), { textContent: "无" })]),
   );
-}
-
-export function renderOutline(
-  headings: { level: number; text: string; pos: number }[],
-  onJump: (pos: number) => void,
-): void {
-  const ul = $("outline");
-  ul.replaceChildren(
-    ...headings.map((h) => {
-      const li = document.createElement("li");
-      li.style.paddingLeft = `${(h.level - 1) * 14}px`;
-      const a = document.createElement("a");
-      a.href = "#";
-      a.textContent = h.text || "（空标题）";
-      a.addEventListener("click", (e) => {
-        e.preventDefault();
-        onJump(h.pos);
-      });
-      li.append(a);
-      return li;
-    }),
-  );
-}
-
-export function renderStatusBar(params: {
-  chars: number;
-  dirty: boolean;
-  saveState: string;
-  displayName: string;
-  path: string | null;
-  revision: string | null;
-  zoom: number;
-}): void {
-  $("sb-chars").textContent = `${params.chars} 字`;
-  const saveText =
-    params.saveState === "saving"
-      ? "保存中…"
-      : params.saveState === "error"
-        ? "保存失败"
-        : params.dirty
-          ? "未保存"
-          : "已保存";
-  $("sb-save").textContent = saveText;
-  $("sb-save").className = params.dirty ? "dirty" : "";
-  $("sb-zoom").textContent = `${Math.round(params.zoom * 100)}%`;
-  document.title = `Athanor Studio — ${params.displayName}${params.dirty ? " *" : ""}`;
 }

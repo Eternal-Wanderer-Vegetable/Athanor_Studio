@@ -260,3 +260,146 @@ export function activeParagraphFormat(view: EditorView): ParagraphFormat {
   }
   return {};
 }
+
+// ---------------------------------------------------------------- 选区归并反射
+//
+// 浮动工具栏/检查器需要整段选区的“归并视图”：逐文本节点收集值，
+// 任何键出现两种不同值记为 mixed（显示 Mixed/空值），不读最后一个 run。
+// 反射是纯读操作：不写入正文，不产生事务。
+
+export const CHARACTER_FORMAT_KEYS = [
+  "fontFamily",
+  "fontSizePt",
+  "color",
+  "highlight",
+  "verticalAlign",
+] as const;
+
+export type CharacterFormatKey = (typeof CHARACTER_FORMAT_KEYS)[number];
+
+export interface SelectionCharacterFormat {
+  /** 每个键的归并值；不一致时省略该键并在 mixed 标记。 */
+  values: CharacterFormat;
+  /** 选区内取值不一致的键。 */
+  mixed: CharacterFormatKey[];
+}
+
+/** 收集单个节点的 span_extra 字符格式。 */
+function charFormatOfNode(node: PMNode): CharacterFormat {
+  const m = node.marks.find((x) => x.type.name === "span_extra");
+  const data = (m?.attrs.data as ExtraMap) ?? {};
+  const fmt = (data[FORMAT_KEY] as ExtraMap) ?? {};
+  return { ...((fmt["character"] as CharacterFormat) ?? {}) };
+}
+
+/** 归并选区字符格式（空选区退化为光标处 storedMarks/activeCharacterFormat）。 */
+export function selectionCharacterFormat(view: EditorView): SelectionCharacterFormat {
+  const { from, to, empty } = view.state.selection;
+  if (empty) {
+    return { values: activeCharacterFormat(view), mixed: [] };
+  }
+  const seen = new Map<CharacterFormatKey, { value: unknown; mixed: boolean }>();
+  const consider = (fmt: CharacterFormat) => {
+    for (const key of CHARACTER_FORMAT_KEYS) {
+      const v = fmt[key];
+      const rec = seen.get(key);
+      if (!rec) {
+        seen.set(key, { value: v, mixed: false });
+      } else if (!rec.mixed && rec.value !== v) {
+        rec.mixed = true;
+      }
+    }
+  };
+  view.state.doc.nodesBetween(from, to, (node) => {
+    if (node.isText) consider(charFormatOfNode(node));
+    return true;
+  });
+  const values: CharacterFormat = {};
+  const mixed: CharacterFormatKey[] = [];
+  for (const key of CHARACTER_FORMAT_KEYS) {
+    const rec = seen.get(key);
+    if (!rec || rec.value === undefined) continue;
+    if (rec.mixed) mixed.push(key);
+    else (values as Record<string, unknown>)[key] = rec.value;
+  }
+  return { values, mixed };
+}
+
+export interface SelectionParagraphFormat {
+  values: ParagraphFormat;
+  mixed: (keyof ParagraphFormat)[];
+}
+
+/** 归并选区覆盖的块级段落格式。 */
+export function selectionParagraphFormat(view: EditorView): SelectionParagraphFormat {
+  const { from, to } = view.state.selection;
+  const seen = new Map<keyof ParagraphFormat, { value: unknown; mixed: boolean }>();
+  view.state.doc.nodesBetween(from, to, (node) => {
+    if (!node.isBlock || node.isTextblock === false) return true;
+    const fmt = paragraphFormat(node);
+    for (const [k, v] of Object.entries(fmt) as [keyof ParagraphFormat, unknown][]) {
+      const rec = seen.get(k);
+      if (!rec) seen.set(k, { value: v, mixed: false });
+      else if (!rec.mixed && rec.value !== v) rec.mixed = true;
+    }
+    return true;
+  });
+  const values: ParagraphFormat = {};
+  const mixed: (keyof ParagraphFormat)[] = [];
+  for (const [k, rec] of seen) {
+    if (rec.value === undefined) continue;
+    if (rec.mixed) mixed.push(k);
+    else (values as Record<string, unknown>)[k] = rec.value;
+  }
+  return { values, mixed };
+}
+
+export type SelectionKind = "empty" | "text" | "table" | "image" | "node";
+
+export interface SelectionContext {
+  kind: SelectionKind;
+  /** 选区是否位于表格内（上下文 Table tab 的依据）。 */
+  inTable: boolean;
+  character: SelectionCharacterFormat;
+  paragraph: SelectionParagraphFormat;
+  /** image 节点的 alt（图片上下文用；无则 undefined）。 */
+  imageAlt?: string;
+}
+
+/** 判断选区/光标是否处于表格结构内（prosemirror-tables 的 table/table_row/table_cell）。 */
+function selectionInTable(view: EditorView): boolean {
+  const { $from } = view.state.selection;
+  for (let d = $from.depth; d >= 0; d--) {
+    const name = $from.node(d).type.name;
+    if (name === "table" || name === "table_row" || name === "table_cell" || name === "table_header") {
+      return true;
+    }
+  }
+  // CellSelection（跨单元格选区）的 $from 已在 table_cell 内；NodeSelection
+  // 选中整表时 $from 在表外一层，检查选中节点本身。
+  const sel = view.state.selection as { node?: PMNode };
+  if (sel.node && (sel.node.type.name === "table" || sel.node.type.name.startsWith("table_"))) {
+    return true;
+  }
+  return false;
+}
+
+/** 派生只读选区上下文（ribbon/inspector/floating toolbar 的输入）。 */
+export function selectionContext(view: EditorView): SelectionContext {
+  const sel = view.state.selection;
+  const inTable = selectionInTable(view);
+  const node = (sel as { node?: PMNode }).node;
+  let kind: SelectionKind = "empty";
+  if (node) {
+    kind = node.type.name === "table" ? "table" : node.type.name === "image" || node.type.name === "figure" || node.type.name === "inline_image" ? "image" : "node";
+  } else if (!sel.empty) {
+    kind = inTable ? "table" : "text";
+  }
+  return {
+    kind,
+    inTable,
+    character: selectionCharacterFormat(view),
+    paragraph: selectionParagraphFormat(view),
+    imageAlt: kind === "image" ? (node?.attrs.alt as string | undefined) : undefined,
+  };
+}

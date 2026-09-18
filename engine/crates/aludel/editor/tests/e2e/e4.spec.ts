@@ -54,6 +54,7 @@ test("page_break inserts a node and round-trips through save", async ({ page }) 
   await mountDoc(page, [
     { type: "paragraph", attrs: { id: "blk_1", extra: null }, content: [{ type: "text", text: "前" }] },
   ]);
+  await page.locator("#tab-insert").click();
   await page.locator("#tb-page-break").click();
   // 编辑器内可见分页标记 + 其后有段落供光标
   await expect(page.locator(".ProseMirror .az-page-break")).toHaveCount(1);
@@ -74,6 +75,7 @@ test("print preview opens, shows real page count and print entry", async ({ page
     `<p data-block-id="blk_1">一</p><div class="page-break" data-block-id="blk_2"></div>`,
     `<p data-block-id="blk_3">二</p>`,
   ]);
+  await page.locator("#tab-view").click();
   await page.locator("#m-preview").click();
   // 浮层打开：状态条显示实数页数 + 快照指纹；打印按钮可用
   await expect(page.locator(".az-preview-overlay")).toBeVisible();
@@ -112,6 +114,7 @@ test("preview falls back to unpaginated render when paging times out", async ({ 
   await page.evaluate(() => {
     (window as unknown as { __previewTimeoutMs?: number }).__previewTimeoutMs = 400;
   });
+  await page.locator("#tab-view").click();
   await page.locator("#m-preview").click();
   // 注入 400ms 超时 → 快速落入回退分支（重灌未分页 print_html）
   await expect(page.locator(".az-preview-status")).toContainText("分页不可用", { timeout: 10_000 });
