@@ -18,13 +18,15 @@
 //!
 //! 保存管线（RFC §决策 3 / 落地方案 M6 验收）：
 //! 1. `pm_to_content_file`：PM JSON → Prima（ID 缺失/重复/非法按 IdKind 补发）
+//!    另含 `assets::persist_assets`：staged → embedded、`data:` → 迁移、
+//!    http(s) → external（spec/azodoc-package.md §4.2）；失败保留原引用并报告
 //! 2. `azodoc_model::validate::check_content`：规范级校验，Error 级拒绝保存
 //! 3. `set_entry("document/content.json")`
 //! 4. `relocate_annotations_layer`：标注随编辑自动重定位（验收④）
 //! 5. `Container::commit(author_type: "human")`（验收③，硬编码）
 //! 6. 可靠落盘：原子替换（临时文件 → sync → rename）；可携带
 //!    `expected_fingerprint` 在落盘前一刻检测外部改动
-//! 7. 响应：修订号 + ID 统计 + 重定位统计 + 文件指纹 + 容器警告
+//! 7. 响应：修订号 + ID 统计 + 重定位统计 + 资产统计 + 文件指纹 + 容器警告
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -35,6 +37,7 @@ use azodoc_model::id::{AzodocId, IdKind};
 use azodoc_model::validate::{self, Level};
 use serde_json::{json, Value};
 
+use crate::assets::{self, StagedAssets};
 use crate::doc_store::{self, Store};
 use crate::http::{Request, Response};
 
@@ -66,6 +69,8 @@ impl ApiError {
 pub struct App {
     /// 串行化 open/save/落盘，避免进程内并发读写同一文件
     state: Mutex<Store>,
+    /// 会话级资产暂存（未提交进容器；随 App 释放即清理）。
+    staged: StagedAssets,
 }
 
 impl App {
@@ -73,6 +78,7 @@ impl App {
     pub fn new(doc_path: PathBuf) -> Self {
         App {
             state: Mutex::new(Store::File(doc_path)),
+            staged: StagedAssets::default(),
         }
     }
 
@@ -80,7 +86,34 @@ impl App {
     pub fn new_draft(container_bytes: Vec<u8>) -> Self {
         App {
             state: Mutex::new(Store::Draft(container_bytes)),
+            staged: StagedAssets::default(),
         }
+    }
+
+    /// 暂存一条资产（mime 白名单 + 字节上限），返回 (as_ id, asset:// 引用)。
+    /// 引用写入 PM 正文；字节在下次保存落库。
+    pub fn stage_asset(
+        &self,
+        filename: &str,
+        mime: &str,
+        bytes: Vec<u8>,
+    ) -> Result<Value, ApiError> {
+        let (id, url) = assets::stage(&self.staged, filename, mime, bytes)?;
+        Ok(json!({ "id": id, "url": url }))
+    }
+
+    /// 读取资产供渲染：暂存区或 registry（embedded → 字节；external → url）。
+    pub fn read_asset(&self, id: &str) -> Result<assets::AssetRead, ApiError> {
+        let store = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let data = store
+            .read_bytes()
+            .map_err(|e| ApiError::Doc(format!("无法读取文档: {e}")))?;
+        let (mut c, _) = azodoc_container::open(data).map_err(|e| ApiError::Doc(e.friendly()))?;
+        assets::read_asset(
+            &mut |p| c.read_entry(p).map_err(|e| ApiError::Doc(e.friendly())),
+            &self.staged,
+            id,
+        )
     }
 
     /// 绑定的文件路径；草稿返回 None。
@@ -201,26 +234,34 @@ impl App {
     }
 
     /// 校验→管线→产出容器字节（不写盘）。七步中第 1–5 步。
+    /// 返回 (容器字节, 响应 JSON, 已落库的暂存 id)；落库 id 供调用方
+    /// 在写盘成功后清理暂存表。
     fn produce_container_bytes(
         store: &Store,
+        staged: &StagedAssets,
         pm_doc: &Value,
         theme: Option<&Value>,
         message: &str,
         author_id: &str,
-    ) -> Result<(Vec<u8>, Value), ApiError> {
+    ) -> Result<(Vec<u8>, Value, Vec<String>), ApiError> {
         let (mut c, warnings) = Self::open_container_from(store)?;
 
         // 1. PM → Prima（ID 补发走引擎的 ULID 生成器）
         let mut idgen = |k: IdKind| -> String { AzodocId::generate(k).as_str().to_string() };
         let converted = azodoc_pm::pm_to_content_file(pm_doc, &mut idgen)
             .map_err(|e| ApiError::BadRequest(format!("ProseMirror → Prima 转换失败: {e}")))?;
+        let mut content_file = converted.content_file;
+
+        // 1b. 资产落库：staged → embedded、data: → 迁移、http(s) → external。
+        // 失败只保留原引用并报告，不产生悬空 asset://（spec §4.2.3）。
+        let assets_report = assets::persist_assets(&mut c, &mut content_file, staged)?;
 
         // 2. 规范级校验（Error 级拒绝；payload_ref/资产存在性经容器条目回调检查）
         let entry_exists = |p: &str| c.has_entry(p);
         let ctx = validate::Ctx {
             entry_exists: &entry_exists,
         };
-        let (issues, _) = validate::check_content(&converted.content_file, &ctx);
+        let (issues, _) = validate::check_content(&content_file, &ctx);
         let errors: Vec<Value> = issues
             .iter()
             .filter(|i| i.level == Level::Error)
@@ -240,7 +281,7 @@ impl App {
         }
 
         // 3. 写 content 层（set_entry 自动同步 manifest sha256）
-        let mut bytes = serde_json::to_vec_pretty(&converted.content_file)
+        let mut bytes = serde_json::to_vec_pretty(&content_file)
             .map_err(|e| ApiError::Doc(format!("content 序列化失败: {e}")))?;
         bytes.push(b'\n');
         c.set_entry(CONTENT_ENTRY, bytes)
@@ -294,8 +335,10 @@ impl App {
                     "moved": s.moved,
                     "detached": s.detached,
                 })),
+                "assets": assets_report.to_json(),
                 "warnings": warnings,
             }),
+            assets_report.persisted_ids,
         ))
     }
 
@@ -322,14 +365,16 @@ impl App {
         match &mut *store {
             Store::Draft(bytes) => {
                 // 草稿更新内存容器字节，不写盘——落盘必须经 save_at 明确选路径。
-                let (out, mut resp) = Self::produce_container_bytes(
+                let (out, mut resp, persisted) = Self::produce_container_bytes(
                     &Store::Draft(bytes.clone()),
+                    &self.staged,
                     pm_doc,
                     theme,
                     &message,
                     &author_id,
                 )?;
                 *bytes = out;
+                assets::drop_persisted(&self.staged, &persisted);
                 resp["fingerprint"] = json!(doc_store::sha256_hex(bytes));
                 resp["draft"] = json!(true);
                 Ok(resp)
@@ -338,12 +383,19 @@ impl App {
                 // 指纹复核在读容器之前：外部把文件改成非 Azodoc 时也能给出
                 // 冲突错误而不是容器解析错误。
                 Self::check_external_change(&store, expected)?;
-                let (out, mut resp) =
-                    Self::produce_container_bytes(&store, pm_doc, theme, &message, &author_id)?;
+                let (out, mut resp, persisted) = Self::produce_container_bytes(
+                    &store,
+                    &self.staged,
+                    pm_doc,
+                    theme,
+                    &message,
+                    &author_id,
+                )?;
                 let path = store.path().expect("File store 必有 path").to_path_buf();
                 // 第 6 步：原子替换（管线与落盘之间仍同一把锁，无窗口）
                 doc_store::atomic_write(&path, &out)
                     .map_err(|e| ApiError::Doc(format!("容器回写失败: {e}")))?;
+                assets::drop_persisted(&self.staged, &persisted);
                 resp["fingerprint"] = json!(doc_store::sha256_hex(&out));
                 resp["path"] = json!(path.display().to_string());
                 Ok(resp)
@@ -367,10 +419,17 @@ impl App {
             )));
         }
         let mut store = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        let (out, mut resp) =
-            Self::produce_container_bytes(&store, pm_doc, theme, &message, &author_id)?;
+        let (out, mut resp, persisted) = Self::produce_container_bytes(
+            &store,
+            &self.staged,
+            pm_doc,
+            theme,
+            &message,
+            &author_id,
+        )?;
         doc_store::atomic_write(&target, &out)
             .map_err(|e| ApiError::Doc(format!("写入 {} 失败: {e}", target.display())))?;
+        assets::drop_persisted(&self.staged, &persisted);
         store.bind_file(target.clone());
         resp["fingerprint"] = json!(doc_store::sha256_hex(&out));
         resp["path"] = json!(target.display().to_string());
@@ -431,13 +490,48 @@ fn loss_summary(pm_doc: &Value, annotations: &Value) -> Value {
     })
 }
 
-/// 路由（静态冒烟页 + 三个 API）。
+/// 路由（静态冒烟页 + API）。
 pub fn route(app: &App, req: &Request) -> Response {
+    // 资产读取是动态路径（/api/asset/<as_id>），先于固定表匹配。
+    if req.method == "GET" {
+        if let Some(id) = req.path.strip_prefix("/api/asset/") {
+            if id.is_empty() || id.contains('/') {
+                return Response::json_with_status(400, &json!({ "error": "资产 id 非法" }));
+            }
+            return match app.read_asset(id) {
+                Ok(assets::AssetRead::Embedded { mime, bytes }) => Response::bytes(mime, bytes),
+                Ok(assets::AssetRead::External { url }) => Response::redirect(&url),
+                Ok(assets::AssetRead::Missing) => {
+                    Response::json_with_status(404, &json!({ "error": "资产不存在" }))
+                }
+                Err(e) => e.to_response(),
+            };
+        }
+    }
     match (req.method.as_str(), req.path.as_str()) {
         ("GET", "/") => Response::html(crate::INDEX_HTML),
         ("GET", "/api/doc") => respond(app.open()),
         ("POST", "/api/save") => match serde_json::from_slice::<Value>(&req.body) {
             Ok(v) => respond(app.save(&v)),
+            Err(e) => Response::json_with_status(
+                400,
+                &json!({ "error": format!("请求体不是合法 JSON: {e}") }),
+            ),
+        },
+        ("POST", "/api/asset/stage") => match serde_json::from_slice::<Value>(&req.body) {
+            Ok(v) => {
+                let filename = v.get("filename").and_then(Value::as_str).unwrap_or("");
+                let mime = v.get("mime").and_then(Value::as_str).unwrap_or("");
+                let data_b64 = v.get("data").and_then(Value::as_str).unwrap_or("");
+                use base64::Engine as _;
+                match base64::engine::general_purpose::STANDARD.decode(data_b64) {
+                    Ok(bytes) => respond(app.stage_asset(filename, mime, bytes)),
+                    Err(e) => Response::json_with_status(
+                        400,
+                        &json!({ "error": format!("data 不是合法 base64: {e}") }),
+                    ),
+                }
+            }
             Err(e) => Response::json_with_status(
                 400,
                 &json!({ "error": format!("请求体不是合法 JSON: {e}") }),

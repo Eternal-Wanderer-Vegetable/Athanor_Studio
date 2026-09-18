@@ -23,6 +23,7 @@ import type {
   OpenResult,
   RecoveryDraft,
   SaveResult,
+  StagedAssetRef,
 } from "./gateway";
 
 async function post(path: string, body: unknown): Promise<{ status: number; data: Record<string, unknown> }> {
@@ -63,6 +64,28 @@ export class HttpGateway implements DocumentGateway {
     const { status, data } = await post("/api/save", body);
     if (status !== 200) return { ok: false, error: String(data["error"] ?? status) };
     return data as unknown as SaveResult;
+  }
+
+  async stageAsset(
+    _sessionId: string,
+    file: { filename: string; mime: string; dataBase64: string },
+  ): Promise<StagedAssetRef> {
+    const { status, data } = await post("/api/asset/stage", {
+      filename: file.filename,
+      mime: file.mime,
+      data: file.dataBase64,
+    });
+    if (status !== 200) throw new Error(String(data["error"] ?? `HTTP ${status}`));
+    return { id: String(data["id"]), url: String(data["url"]) };
+  }
+
+  assetUrl(_sessionId: string, ref: string): string {
+    // asset://<id>[/<name>] → 服务端资产端点；external 条目由服务端 302。
+    if (ref.startsWith("asset://")) {
+      const id = ref.slice("asset://".length).split("/")[0];
+      return `/api/asset/${encodeURIComponent(id)}`;
+    }
+    return ref;
   }
 
   async saveDocumentAs(): Promise<SaveResult> {

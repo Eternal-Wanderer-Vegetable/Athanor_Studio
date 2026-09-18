@@ -400,6 +400,221 @@ fn http_layer_routes_end_to_end() {
     assert_eq!(last.author_id.as_deref(), Some("http-tester"));
 }
 
+// ---------------------------------------------------------------- 资产（E1）
+
+fn http_get_bytes(port: u16, path: &str) -> (u16, String, Vec<u8>) {
+    let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    let req = format!("GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+    s.write_all(req.as_bytes()).unwrap();
+    let mut buf = Vec::new();
+    s.read_to_end(&mut buf).unwrap();
+    let (head, body) = {
+        let pos = buf
+            .windows(4)
+            .position(|w| w == b"\r\n\r\n")
+            .expect("响应必有头体分隔");
+        (
+            String::from_utf8_lossy(&buf[..pos]).to_string(),
+            buf[pos + 4..].to_vec(),
+        )
+    };
+    let status: u16 = head
+        .split_whitespace()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .expect("状态行");
+    (status, head, body)
+}
+
+fn b64(data: &[u8]) -> String {
+    use base64::Engine as _;
+    base64::engine::general_purpose::STANDARD.encode(data)
+}
+
+/// 含一个 image 节点的最小 PM 文档。
+fn pm_with_image(asset: &str) -> Value {
+    json!({
+        "type": "doc", "attrs": {"schema_version": "1.0", "extra": null},
+        "content": [{
+            "type": "image",
+            "attrs": {"id": "blk_00000000000000000000000000", "extra": null,
+                      "asset": asset, "alt": "测试图"}
+        }]
+    })
+}
+
+#[test]
+fn staged_asset_persists_to_registry_and_serves() {
+    let (_dir, doc) = make_doc("staged");
+    let port = start_server(doc.clone());
+
+    // 暂存：mime 白名单拒绝 SVG
+    let (status, _, _) = http_json(
+        port,
+        "POST",
+        "/api/asset/stage",
+        Some(&json!({"filename": "x.svg", "mime": "image/svg+xml", "data": b64(b"<svg/>")})),
+    );
+    assert_eq!(status, 400, "SVG 不在白名单应被拒绝");
+
+    // 正常暂存
+    let (status, staged, _) = http_json(
+        port,
+        "POST",
+        "/api/asset/stage",
+        Some(&json!({"filename": "..\\pic.png", "mime": "image/png", "data": b64(b"png-bytes")})),
+    );
+    assert_eq!(status, 200);
+    let id = staged["id"].as_str().unwrap().to_string();
+    let url = staged["url"].as_str().unwrap().to_string();
+    assert!(url.starts_with("asset://as_"), "应返回 asset:// 引用");
+    assert!(url.ends_with("/pic.png"), "文件名已消毒: {url}");
+
+    // 暂存区即可渲染（保存前）
+    let (status, head, body) = http_get_bytes(port, &format!("/api/asset/{id}"));
+    assert_eq!(status, 200);
+    assert!(head.contains("image/png"), "应为图片 mime: {head}");
+    assert_eq!(body, b"png-bytes");
+
+    // 保存：asset:// 引用 → registry + 二进制落库
+    let (status, resp, _) = http_json(
+        port,
+        "POST",
+        "/api/save",
+        Some(&json!({ "pm_doc": pm_with_image(&url), "author_id": "asset-tester" })),
+    );
+    assert_eq!(status, 200, "保存失败: {resp}");
+    assert_eq!(resp["assets"]["staged"].as_u64().unwrap(), 1);
+
+    let mut c = read_container(&doc);
+    let reg: Value = serde_json::from_slice(&c.read_entry("assets/registry.json").unwrap())
+        .expect("registry 应存在");
+    let entry = reg["assets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["id"] == id)
+        .expect("资产已登记")
+        .clone();
+    assert_eq!(entry["storage"], "embedded");
+    assert_eq!(entry["filename"], "pic.png");
+    let path = entry["path"].as_str().unwrap().to_string();
+    assert_eq!(c.read_entry(&path).unwrap(), b"png-bytes");
+    assert_eq!(
+        entry["sha256"].as_str().unwrap(),
+        aludel::doc_store::sha256_hex(b"png-bytes")
+    );
+    assert_eq!(
+        c.manifest_value()["layers"]["assets"]["path"],
+        "assets/registry.json"
+    );
+    drop(c);
+
+    // 保存后仍可读（现在来自 registry），且 verify 通过
+    let (status, _, body) = http_get_bytes(port, &format!("/api/asset/{id}"));
+    assert_eq!(status, 200);
+    assert_eq!(body, b"png-bytes");
+    assert_eq!(athanor_cli::verify_cmd::run(&doc), 0, "verify 必须通过");
+
+    // 重开后正文是 asset:// 引用
+    let opened = http_json(port, "GET", "/api/doc", None).1;
+    let reopened = serde_json::to_string(&opened["pm_doc"]).unwrap();
+    assert!(reopened.contains("asset://as_"), "正文应保留 asset:// 引用");
+}
+
+#[test]
+fn save_migrates_data_uri_and_external_urls() {
+    let (_dir, doc) = make_doc("migrate");
+    let app = App::new(doc.clone());
+    let mut pm = pm_with_image(&format!("data:image/png;base64,{}", b64(b"migrated")));
+    let content = pm["content"].as_array_mut().unwrap();
+    content.push(json!({
+        "type": "image",
+        "attrs": {"id": "blk_00000000000000000000000001", "extra": null,
+                  "asset": "https://example.com/remote.png", "alt": "外链"}
+    }));
+
+    let resp = app.save(&json!({ "pm_doc": pm })).expect("保存应成功");
+    assert_eq!(resp["assets"]["migrated"].as_u64().unwrap(), 1);
+    assert_eq!(resp["assets"]["external"].as_u64().unwrap(), 1);
+
+    let mut c = read_container(&doc);
+    let reg: Value =
+        serde_json::from_slice(&c.read_entry("assets/registry.json").unwrap()).unwrap();
+    let assets = reg["assets"].as_array().unwrap();
+    let emb = assets.iter().find(|e| e["storage"] == "embedded").unwrap();
+    assert_eq!(
+        c.read_entry(emb["path"].as_str().unwrap()).unwrap(),
+        b"migrated"
+    );
+    let ext = assets
+        .iter()
+        .find(|e| e["url"] == "https://example.com/remote.png")
+        .expect("外链资产已登记为 external");
+    assert_eq!(ext["storage"], "external");
+    drop(c);
+
+    let content: Value = serde_json::from_slice(
+        &read_container(&doc)
+            .read_entry("document/content.json")
+            .unwrap(),
+    )
+    .unwrap();
+    let s = serde_json::to_string(&content).unwrap();
+    assert!(!s.contains("data:"), "data: URI 应被迁移");
+    assert!(!s.contains("https://example.com"), "外链应登记为 external");
+    assert!(s.contains("asset://as_"));
+    assert_eq!(athanor_cli::verify_cmd::run(&doc), 0, "verify 必须通过");
+}
+
+#[test]
+fn dangling_and_bad_asset_refs_warn_but_save() {
+    let (_dir, doc) = make_doc("dangling");
+    let app = App::new(doc.clone());
+    let ghost = azodoc_model::id::AzodocId::generate(azodoc_model::id::IdKind::As)
+        .as_str()
+        .to_string();
+    let mut pm = pm_with_image(&format!("asset://{ghost}/x.png"));
+    pm["content"].as_array_mut().unwrap().push(json!({
+        "type": "image",
+        "attrs": {"id": "blk_00000000000000000000000002", "extra": null,
+                  "asset": "data:!!!not-base64!!!", "alt": "坏 data"}
+    }));
+
+    let resp = app
+        .save(&json!({ "pm_doc": pm }))
+        .expect("保存应成功（警告而非拒绝）");
+    let warns = resp["assets"]["warnings"].as_array().unwrap();
+    assert!(warns.len() >= 2, "悬空引用与坏 data: 都应报告: {warns:?}");
+
+    // 原引用保留（不产 生悬空 asset:// 之外的改写）
+    let content: Value = serde_json::from_slice(
+        &read_container(&doc)
+            .read_entry("document/content.json")
+            .unwrap(),
+    )
+    .unwrap();
+    let s = serde_json::to_string(&content).unwrap();
+    assert!(s.contains(&ghost), "悬空 asset:// 原样保留");
+    assert!(s.contains("not-base64"), "无法解码的 data: 原样保留");
+}
+
+#[test]
+fn save_without_asset_refs_keeps_staged_unpersisted() {
+    let (_dir, doc) = make_doc("unpersisted");
+    let app = App::new(doc.clone());
+    // 暂存了但正文没引用 → 保存不落库、不报错
+    let staged = app
+        .stage_asset("unused.png", "image/png", b"unused".to_vec())
+        .unwrap();
+    assert!(staged["url"].as_str().unwrap().starts_with("asset://"));
+    let mut pm = app.open().unwrap()["pm_doc"].clone();
+    edit_pm(&mut pm);
+    let resp = app.save(&json!({ "pm_doc": pm })).expect("保存应成功");
+    assert_eq!(resp["assets"]["staged"].as_u64().unwrap(), 0);
+    assert_eq!(athanor_cli::verify_cmd::run(&doc), 0);
+}
+
 #[test]
 fn request_body_over_limit_is_rejected() {
     let (_dir, doc) = make_doc("big");

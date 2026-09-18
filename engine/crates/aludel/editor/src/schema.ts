@@ -83,10 +83,25 @@ function paraFormatFromDom(dom: HTMLElement): ParagraphFormat {
   return out;
 }
 
-/** Prima 资产引用（asset://<id>/<path>）→ 可展示 URL；非 http(s) 的返回 null，
- * 由 toDOM 渲染为占位框（真实资源解析属表现层/导出，编辑器内不假装能加载）。 */
+/** Prima 资产引用 → 可展示 URL；非已知可展示形态的返回 null，
+ * 由 toDOM 渲染为占位框（不假装能加载）。
+ * `asset://` 经注册的解析器映射到本端 URL（HTTP /api/asset 或
+ * Tauri azodoc-asset:// 协议）；未注册解析器时（测试/原型）占位。
+ * `data:`/`blob:`/`http(s)` 原样可显示——其中 data: 是 §4.2 的旧形态，
+ * 打开可显示、保存时由服务端迁移为 asset://。 */
+export type AssetResolver = (ref: string) => string | null;
+let assetResolver: AssetResolver | null = null;
+
+/** 注册会话级资产解析器（DocumentController 在挂接 gateway 后调用）。 */
+export function setAssetResolver(r: AssetResolver | null): void {
+  assetResolver = r;
+}
+
 function assetUrl(asset: unknown): string | null {
   const s = typeof asset === "string" ? asset : "";
+  if (s.startsWith("asset://")) {
+    return assetResolver ? assetResolver(s) : null;
+  }
   return /^(?:https?:\/\/|blob:|data:image\/)/.test(s) ? s : null;
 }
 

@@ -224,18 +224,10 @@ reg("insert.image", "图片", () => {
   input.accept = "image/*";
   input.onchange = () => {
     const file = input.files?.[0];
-    if (!file || file.size > 10 * 1024 * 1024) {
-      if (file) setMsg("图片过大（上限 10 MB）。", false);
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result !== "string" || ctl.view !== v) return;
-      const alt = window.prompt("替代文字（可选）：", file.name) ?? file.name;
-      v.dispatch(v.state.tr.replaceSelectionWith(schema.nodes.image.create({ id: newId("blk"), asset: reader.result, alt })));
-      v.focus();
-    };
-    reader.readAsDataURL(file);
+    if (!file) return;
+    const alt = window.prompt("替代文字（可选）：", file.name) ?? file.name;
+    // 与粘贴/拖入共用服务端暂存入口（写 asset:// 引用）
+    void ctl.insertImageFile(file, alt).then(() => v.focus());
   };
   input.click();
 });

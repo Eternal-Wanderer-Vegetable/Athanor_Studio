@@ -23,7 +23,7 @@ import { keymap } from "prosemirror-keymap";
 import { liftListItem, sinkListItem, splitListItem } from "prosemirror-schema-list";
 import { history, undo, redo } from "prosemirror-history";
 import type { Node as PMNode } from "prosemirror-model";
-import { schema } from "../schema";
+import { schema, setAssetResolver } from "../schema";
 import type { DocumentGateway, DocResponse, JobRequest, JobSnapshot, SaveResult } from "../platform/gateway";
 import { SessionStore } from "./session-store";
 import { askText } from "../ui/dialogs";
@@ -43,6 +43,8 @@ export interface ControllerHooks {
 }
 
 const RECOVERY_DEBOUNCE_MS = 2_000;
+/** 客户端预检的资产字节上限（服务端同值；超限在 stage 前给出可读提示）。 */
+const MAX_ASSET_BYTES = 32 * 1024 * 1024;
 
 export class DocumentController {
   view: EditorView | null = null;
@@ -99,6 +101,48 @@ export class DocumentController {
 
   // ---------------------------------------------------------------- 挂载
 
+  /** 图片文件 → 服务端暂存 → 插入 image 节点（粘贴/拖放/插入命令共用入口）。
+   *  正文写 `asset://<as_id>/<filename>`；字节随下次保存落库。
+   *  dropPos 给出时插入到指定位置，否则替换当前选区。 */
+  async insertImageFile(file: File, alt?: string, dropPos?: number): Promise<void> {
+    const v = this.view;
+    if (!v) return;
+    if (!file.type.startsWith("image/")) {
+      this.hooks.onMessage("不是图片文件。", false);
+      return;
+    }
+    if (file.size > MAX_ASSET_BYTES) {
+      this.hooks.onMessage(`图片过大（上限 ${Math.round(MAX_ASSET_BYTES / 1024 / 1024)} MB）。`, false);
+      return;
+    }
+    try {
+      const dataBase64 = await fileToBase64(file);
+      if (this.view !== v) return;
+      const staged = await this.gateway.stageAsset(this.store.state.sessionId, {
+        filename: file.name || "pasted.png",
+        mime: file.type,
+        dataBase64,
+      });
+      if (this.view !== v) return;
+      const image = schema.nodes.image.create({
+        id: makeEditorId("blk"),
+        asset: staged.url,
+        alt: alt ?? file.name,
+      });
+      if (dropPos !== undefined) {
+        try {
+          v.dispatch(v.state.tr.insert(dropPos, image).scrollIntoView());
+          return;
+        } catch {
+          // 目标位置不接受该节点：退回替换当前选区
+        }
+      }
+      v.dispatch(v.state.tr.replaceSelectionWith(image).scrollIntoView());
+    } catch (e) {
+      this.hooks.onMessage(`图片暂存失败: ${errText(e)}`, false);
+    }
+  }
+
   private createEditor(docJson: Record<string, unknown>): EditorView {
     const doc = schema.nodeFromJSON(docJson);
     return new EditorView(this.host, {
@@ -117,34 +161,37 @@ export class DocumentController {
       }),
       attributes: { spellcheck: "false" },
       handleDoubleClickOn: (v, _pos, node, nodePos) => {
-        if (node.type.name !== "math_block" && node.type.name !== "inline_math") return false;
-        const current = String(node.attrs.latex ?? "");
-        void askText("LaTeX 源码", current).then((next) => {
-          if (next !== null && this.view === v) v.dispatch(v.state.tr.setNodeAttribute(nodePos, "latex", next));
-        });
-        return true;
+        if (node.type.name === "math_block" || node.type.name === "inline_math") {
+          const current = String(node.attrs.latex ?? "");
+          void askText("LaTeX 源码", current).then((next) => {
+            if (next !== null && this.view === v) v.dispatch(v.state.tr.setNodeAttribute(nodePos, "latex", next));
+          });
+          return true;
+        }
+        if (node.type.name === "image" || node.type.name === "figure" || node.type.name === "inline_image") {
+          const current = String(node.attrs.alt ?? "");
+          void askText("替代文字（无障碍，必填可读描述）", current).then((next) => {
+            if (next !== null && this.view === v) v.dispatch(v.state.tr.setNodeAttribute(nodePos, "alt", next));
+          });
+          return true;
+        }
+        return false;
       },
       handleDOMEvents: {
         paste: (v, event) => {
           const clipboard = event.clipboardData;
           const file = clipboard?.files?.[0];
           if (!file || !file.type.startsWith("image/")) return false;
-          if (file.size > 10 * 1024 * 1024) {
-            this.hooks.onMessage("图片过大（上限 10 MB）。", false);
-            return true;
-          }
           event.preventDefault();
-          const reader = new FileReader();
-          reader.onload = () => {
-            if (typeof reader.result !== "string" || this.view !== v) return;
-            const image = schema.nodes.image.create({
-              id: makeEditorId("blk"),
-              asset: reader.result,
-              alt: file.name,
-            });
-            v.dispatch(v.state.tr.replaceSelectionWith(image));
-          };
-          reader.readAsDataURL(file);
+          void this.insertImageFile(file);
+          return true;
+        },
+        drop: (v, event) => {
+          const file = event.dataTransfer?.files?.[0];
+          if (!file || !file.type.startsWith("image/")) return false;
+          event.preventDefault();
+          const pos = v.posAtCoords({ left: event.clientX, top: event.clientY })?.pos;
+          void this.insertImageFile(file, undefined, pos);
           return true;
         },
         mousedown: (v, event) => {
@@ -195,6 +242,9 @@ export class DocumentController {
       fingerprint: d.fingerprint,
       displayName,
     });
+    // 资产解析器绑定当前会话（asset:// → gateway 的展示 URL）
+    const sessionId = result.sessionId;
+    setAssetResolver((ref) => this.gateway.assetUrl(sessionId, ref));
     this.view?.destroy();
     this.view = this.createEditor(d.pm_doc);
     this.baseline = this.view.state.doc;
@@ -658,6 +708,21 @@ function countChars(doc: PMNode): number {
     return true;
   });
   return n;
+}
+
+/** File → base64（不含 data: 前缀）；stageAsset 入参。 */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const res = r.result;
+      if (typeof res !== "string") return reject(new Error("读取失败"));
+      const comma = res.indexOf(",");
+      resolve(comma >= 0 ? res.slice(comma + 1) : res);
+    };
+    r.onerror = () => reject(new Error("读取文件失败"));
+    r.readAsDataURL(file);
+  });
 }
 
 function makeEditorId(prefix: "blk"): string {

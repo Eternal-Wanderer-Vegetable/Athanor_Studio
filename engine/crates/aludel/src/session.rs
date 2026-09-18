@@ -75,6 +75,22 @@ impl DocumentSession {
         self.app.save(body)
     }
 
+    /// Stage an asset into session memory; the returned `asset://` reference
+    /// is written into the PM document and persisted on the next save.
+    pub fn stage_asset(
+        &self,
+        filename: &str,
+        mime: &str,
+        bytes: Vec<u8>,
+    ) -> Result<Value, ApiError> {
+        self.app.stage_asset(filename, mime, bytes)
+    }
+
+    /// Read an asset for rendering (staged first, then registry).
+    pub fn read_asset(&self, id: &str) -> Result<crate::assets::AssetRead, ApiError> {
+        self.app.read_asset(id)
+    }
+
     /// Save-as: write the pipeline output to `target` and rebind the session.
     pub fn save_as(
         &self,

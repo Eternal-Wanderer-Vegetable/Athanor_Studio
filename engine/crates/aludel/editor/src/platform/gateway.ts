@@ -86,6 +86,13 @@ export interface RecoveryDraft {
   saved_at: string | null;
 }
 
+export interface StagedAssetRef {
+  /** 服务端生成的 as_ id。 */
+  id: string;
+  /** 写入正文 asset 字段的引用：`asset://<id>/<filename>`。 */
+  url: string;
+}
+
 export interface DocumentGateway {
   readonly desktop: boolean;
 
@@ -94,6 +101,14 @@ export interface DocumentGateway {
   /** HTTP 模式直接返回当前文档（服务端单文档会话）。 */
   openInitial(): Promise<OpenResult>;
   saveDocument(sessionId: string, body: Record<string, unknown>): Promise<SaveResult>;
+  /** 暂存资产（dataBase64 为文件字节）；返回写入正文的 asset:// 引用。 */
+  stageAsset(
+    sessionId: string,
+    file: { filename: string; mime: string; dataBase64: string },
+  ): Promise<StagedAssetRef>;
+  /** `asset://<id>` → 本端可展示 URL（HTTP 端点 / Tauri 自定义协议）；
+   * 非 asset:// 引用原样返回。 */
+  assetUrl(sessionId: string, ref: string): string;
   saveDocumentAs(
     sessionId: string,
     target: string,

@@ -96,6 +96,52 @@ pub fn save_document_as(
     Ok(json!({ "session_id": new_id, "doc": resp }))
 }
 
+/// 把一条资产暂存进会话（bytes 以 base64 传入），返回 `{id, url}`，
+/// url 为写入正文的 `asset://<id>/<filename>`。
+#[tauri::command]
+pub fn stage_asset(
+    state: tauri::State<'_, SessionRegistry>,
+    session_id: String,
+    filename: String,
+    mime: String,
+    data: String,
+) -> Result<Value, SessionError> {
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data.trim())
+        .map_err(|e| SessionError::new("bad_request", format!("data 不是合法 base64: {e}")))?;
+    state
+        .session(&session_id)?
+        .stage_asset(&filename, &mime, bytes)
+        .map_err(SessionError::from)
+}
+
+/// 读取资产字节（暂存区或 registry）供渲染。internal：前端渲染走
+/// `azodoc-asset://` 自定义协议（lib.rs 注册），此命令主要供测试。
+#[tauri::command]
+pub fn read_asset(
+    state: tauri::State<'_, SessionRegistry>,
+    session_id: String,
+    id: String,
+) -> Result<Value, SessionError> {
+    use base64::Engine as _;
+    match state.session(&session_id)?.read_asset(&id)? {
+        aludel::assets::AssetRead::Embedded { mime, bytes } => Ok(json!({
+            "kind": "embedded",
+            "mime": mime,
+            "data": base64::engine::general_purpose::STANDARD.encode(bytes),
+        })),
+        aludel::assets::AssetRead::External { url } => Ok(json!({
+            "kind": "external",
+            "url": url,
+        })),
+        aludel::assets::AssetRead::Missing => Err(SessionError::new(
+            "asset_not_found",
+            format!("资产不存在: {id}"),
+        )),
+    }
+}
+
 #[tauri::command]
 pub fn close_document(
     state: tauri::State<'_, SessionRegistry>,

@@ -24,6 +24,7 @@ import type {
   OpenResult,
   RecoveryDraft,
   SaveResult,
+  StagedAssetRef,
 } from "./gateway";
 
 const DOC_FILTER = { name: "Azodoc 文档", extensions: ["azodoc"] };
@@ -59,6 +60,28 @@ export class TauriGateway implements DocumentGateway {
     body: Record<string, unknown>,
   ): Promise<SaveResult> {
     return invoke<SaveResult>("save_document_as", { sessionId, target, overwrite, body });
+  }
+
+  async stageAsset(
+    sessionId: string,
+    file: { filename: string; mime: string; dataBase64: string },
+  ): Promise<StagedAssetRef> {
+    return invoke<StagedAssetRef>("stage_asset", {
+      sessionId,
+      filename: file.filename,
+      mime: file.mime,
+      data: file.dataBase64,
+    });
+  }
+
+  assetUrl(sessionId: string, ref: string): string {
+    // azodoc-asset://localhost/<session>/<id> → lib.rs 自定义协议处理器；
+    // session id 可能含路径字符，必须 percent-encode。
+    if (ref.startsWith("asset://")) {
+      const id = ref.slice("asset://".length).split("/")[0];
+      return `azodoc-asset://localhost/${encodeURIComponent(sessionId)}/${encodeURIComponent(id)}`;
+    }
+    return ref;
   }
 
   async closeDocument(sessionId: string): Promise<void> {
