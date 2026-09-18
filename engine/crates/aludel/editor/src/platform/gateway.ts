@@ -22,6 +22,7 @@ export interface DocResponse {
   revision: string | null;
   draft?: boolean;
   pm_doc: Record<string, unknown>;
+  theme?: Record<string, unknown>;
   annotations: { annotations?: Record<string, unknown>[] };
   history: {
     id: string;
@@ -113,7 +114,7 @@ export interface DocumentGateway {
   cancelJob(jobId: number): Promise<boolean>;
 
   // ---- 恢复草稿（HTTP 模式为空实现）----
-  writeRecovery(sessionKey: string, generation: number, pmDoc: unknown, sessionPath: string | null): Promise<void>;
+  writeRecovery(sessionKey: string, generation: number, pmDoc: unknown, sessionPath: string | null, theme?: unknown): Promise<void>;
   listRecoveries(): Promise<RecoveryDraft[]>;
   readRecovery(file: string): Promise<Record<string, unknown>>;
   deleteRecovery(key: string): Promise<void>;

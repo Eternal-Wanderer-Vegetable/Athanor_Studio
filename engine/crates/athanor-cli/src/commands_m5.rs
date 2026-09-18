@@ -34,6 +34,65 @@ h1,h2,h3,h4,h5,h6 { break-after: avoid; } \
 table, figure, pre { break-inside: avoid; } \
 .footnotes { break-before: page; }";
 
+const THEME_ENTRY: &str = "presentation/theme.json";
+
+fn css_content(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', " ")
+}
+
+fn print_css(theme: &Value) -> (String, String) {
+    let size = match theme.get("pageSize").and_then(Value::as_str) {
+        Some("Letter") => "Letter",
+        _ => "A4",
+    };
+    let orientation = match theme.get("orientation").and_then(Value::as_str) {
+        Some("landscape") => "landscape",
+        _ => "portrait",
+    };
+    let margins = theme.get("margins").and_then(Value::as_object);
+    let margin = |name: &str, fallback: f64| {
+        margins
+            .and_then(|m| m.get(name))
+            .and_then(Value::as_f64)
+            .map(|v| v.clamp(5.0, 60.0))
+            .unwrap_or(fallback)
+    };
+    let top = margin("top", 22.0);
+    let right = margin("right", 18.0);
+    let bottom = margin("bottom", 22.0);
+    let left = margin("left", 18.0);
+    let header = theme
+        .get("header")
+        .and_then(Value::as_str)
+        .map(css_content)
+        .unwrap_or_default();
+    let footer = theme
+        .get("footer")
+        .and_then(Value::as_str)
+        .map(css_content)
+        .unwrap_or_default();
+    let mut css = format!(
+        "@page {{ size: {size} {orientation}; margin: {top}mm {right}mm {bottom}mm {left}mm; }} \
+h1,h2,h3,h4,h5,h6 {{ break-after: avoid; }} \
+table, figure, pre {{ break-inside: avoid; }} \
+.footnotes {{ break-before: page; }}"
+    );
+    if !header.is_empty() {
+        css.push_str(&format!(
+            " .azodoc-header::before {{ content: \"{header}\"; }}"
+        ));
+    }
+    if !footer.is_empty() {
+        css.push_str(&format!(
+            " .azodoc-footer::before {{ content: \"{footer}\"; }}"
+        ));
+    }
+    (css, format!("{size} {orientation}"))
+}
+
 fn now() -> String {
     azodoc_container::builder::rfc3339_now()
 }
@@ -214,11 +273,17 @@ pub fn cmd_publish(path: &Path, args: &PublishArgs) -> i32 {
 
     // 1. 导出印刷用 HTML
     let doc = load_export_doc(&mut c, None, None);
+    let theme: Value = c
+        .read_entry(THEME_ENTRY)
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_else(|| json!({}));
+    let (print_css, page_size) = print_css(&theme);
     let mut seed_log = azodoc_convert::LossLog::new();
     let html = azodoc_html::export_html(&doc, &mut seed_log);
     let print_html = html.replace(
         "</head>",
-        &format!("<style id=\"azodoc-print\">{}</style>\n</head>", PRINT_CSS),
+        &format!("<style id=\"azodoc-print\">{}</style>\n</head>", print_css),
     );
 
     // 2. 无头打印：默认 CDP + Paged.js 分页（页码/运行头）；失败或 --no-paged 回退直印
@@ -301,7 +366,7 @@ pub fn cmd_publish(path: &Path, args: &PublishArgs) -> i32 {
             "fingerprint": browser.fingerprint,
         },
         "artifact": {"path": artifact_path, "sha256": pdf_sha},
-        "page": {"count": pages.unwrap_or(0), "size": "A4"},
+        "page": {"count": pages.unwrap_or(0), "size": page_size},
         "content_hash": content_hash,
         "layout_hash": layout_hash,
         "signature": null,

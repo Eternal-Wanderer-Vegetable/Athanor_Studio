@@ -38,6 +38,7 @@ import { TauriGateway } from "./platform/tauri";
 import { HttpGateway } from "./platform/http";
 import { $, renderOutline, renderSidebar, renderStatusBar, setMsg } from "./ui/panels";
 import { askText } from "./ui/dialogs";
+import { askPageSettings } from "./ui/page-settings";
 
 const tauriMode = "__TAURI_INTERNALS__" in window;
 const gateway = tauriMode ? new TauriGateway() : new HttpGateway();
@@ -154,6 +155,11 @@ reg("format.clear", "清除格式", () => {
   if (!v) return;
   clearParagraphFormat(v.state, v.dispatch);
   clearCharacterFormat(v.state, v.dispatch);
+});
+reg("layout.pageSettings", "页面设置…", () => {
+  void askPageSettings(ctl.currentPageTheme).then((theme) => {
+    if (theme) ctl.setPageTheme(theme);
+  });
 });
 
 function applyPara(patch: Parameters<typeof setParagraphFormat>[2]): void {
@@ -408,7 +414,11 @@ async function boot(): Promise<void> {
     ["m-verify", "file.verify"],
     ["m-import", "job.import"],
     ["m-export", "job.export"],
+    ["m-export-html", "job.exportHtml"],
+    ["m-export-text", "job.exportText"],
+    ["m-export-docx", "job.exportDocx"],
     ["m-publish", "job.publish"],
+    ["m-page-settings", "layout.pageSettings"],
     ["cancel-job", "job.cancel"],
     ["sb-zoom-in", "view.zoomIn"],
     ["sb-zoom-out", "view.zoomOut"],

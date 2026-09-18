@@ -139,6 +139,7 @@ pub fn write_recovery(
     generation: u64,
     pm_doc: Value,
     session_path: Option<String>,
+    theme: Option<Value>,
 ) -> Result<Value, SessionError> {
     let base = app_data_dir(&app)?;
     let file = recovery::write_draft(
@@ -149,6 +150,7 @@ pub fn write_recovery(
             "generation": generation,
             "saved_at": azodoc_container::builder::rfc3339_now(),
             "pm_doc": pm_doc,
+            "theme": theme.unwrap_or_else(|| json!({})),
         }),
     )?;
     Ok(json!({ "file": file }))

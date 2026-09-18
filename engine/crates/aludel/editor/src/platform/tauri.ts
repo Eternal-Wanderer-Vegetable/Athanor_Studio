@@ -104,12 +104,14 @@ export class TauriGateway implements DocumentGateway {
     generation: number,
     pmDoc: unknown,
     sessionPath: string | null,
+    theme?: unknown,
   ): Promise<void> {
     await invoke("write_recovery", {
       sessionKey,
       generation,
       pmDoc,
       sessionPath,
+      theme,
     });
   }
 

@@ -40,6 +40,7 @@ use crate::http::{Request, Response};
 
 const CONTENT_ENTRY: &str = "document/content.json";
 const ANNOTATIONS_ENTRY: &str = "semantics/annotations.json";
+const THEME_ENTRY: &str = "presentation/theme.json";
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApiError {
@@ -132,6 +133,15 @@ impl App {
             json!({"schema_version": "1.0", "annotations": []})
         };
 
+        let theme = if c.has_entry(THEME_ENTRY) {
+            let bytes = c
+                .read_entry(THEME_ENTRY)
+                .map_err(|e| ApiError::Doc(e.friendly()))?;
+            serde_json::from_slice(&bytes).unwrap_or_else(|_| json!({}))
+        } else {
+            json!({})
+        };
+
         let history: Vec<Value> = c
             .history()
             .map_err(|e| ApiError::Doc(e.friendly()))?
@@ -156,19 +166,26 @@ impl App {
             "revision": c.manifest_typed().current_revision,
             "pm_doc": pm_doc,
             "annotations": annotations,
+            "theme": theme,
             "history": history,
             "warnings": warnings,
             "loss_summary": loss_summary(&pm_doc, &annotations),
         }))
     }
 
-    /// 校验请求体：pm_doc + 可选 message / author_id / expected_fingerprint。
-    fn parse_save_body(body: &Value) -> Result<(&Value, String, String), ApiError> {
+    /// 校验请求体：pm_doc + 可选 theme / message / author_id / expected_fingerprint。
+    fn parse_save_body(body: &Value) -> Result<(&Value, Option<&Value>, String, String), ApiError> {
         let Some(pm_doc) = body.get("pm_doc") else {
             return Err(ApiError::BadRequest("缺少 pm_doc 字段".into()));
         };
         if !pm_doc.is_object() {
             return Err(ApiError::BadRequest("pm_doc 必须是 JSON 对象".into()));
+        }
+        let theme = body.get("theme");
+        if let Some(theme) = theme {
+            if !theme.is_object() {
+                return Err(ApiError::BadRequest("theme 必须是 JSON 对象".into()));
+            }
         }
         let message = body
             .get("message")
@@ -180,13 +197,14 @@ impl App {
             .and_then(Value::as_str)
             .unwrap_or("local")
             .to_string();
-        Ok((pm_doc, message, author_id))
+        Ok((pm_doc, theme, message, author_id))
     }
 
     /// 校验→管线→产出容器字节（不写盘）。七步中第 1–5 步。
     fn produce_container_bytes(
         store: &Store,
         pm_doc: &Value,
+        theme: Option<&Value>,
         message: &str,
         author_id: &str,
     ) -> Result<(Vec<u8>, Value), ApiError> {
@@ -227,6 +245,26 @@ impl App {
         bytes.push(b'\n');
         c.set_entry(CONTENT_ENTRY, bytes)
             .map_err(|e| ApiError::Doc(e.friendly()))?;
+
+        if let Some(theme) = theme {
+            let mut theme_bytes = serde_json::to_vec_pretty(theme)
+                .map_err(|e| ApiError::Doc(format!("theme 序列化失败: {e}")))?;
+            theme_bytes.push(b'\n');
+            c.set_entry(THEME_ENTRY, theme_bytes)
+                .map_err(|e| ApiError::Doc(e.friendly()))?;
+            let mut manifest = c.manifest_value().clone();
+            if let Some(layers) = manifest.get_mut("layers").and_then(Value::as_object_mut) {
+                layers.insert(
+                    "presentation".to_string(),
+                    json!({
+                        "path": THEME_ENTRY,
+                        "sha256": doc_store::sha256_hex(&c.read_entry(THEME_ENTRY).unwrap_or_default()),
+                    }),
+                );
+            }
+            c.set_manifest(manifest)
+                .map_err(|e| ApiError::Doc(e.friendly()))?;
+        }
 
         // 4. 标注自动重定位（层不存在 → None）
         let stats = athanor_cli::commands_m3::relocate_annotations_layer(&mut c)
@@ -277,7 +315,7 @@ impl App {
 
     /// POST /api/save —— 七步保存管线（保存到当前绑定路径）。
     pub fn save(&self, body: &Value) -> Result<Value, ApiError> {
-        let (pm_doc, message, author_id) = Self::parse_save_body(body)?;
+        let (pm_doc, theme, message, author_id) = Self::parse_save_body(body)?;
         let expected = body.get("expected_fingerprint").and_then(Value::as_str);
 
         let mut store = self.state.lock().unwrap_or_else(|e| e.into_inner());
@@ -287,6 +325,7 @@ impl App {
                 let (out, mut resp) = Self::produce_container_bytes(
                     &Store::Draft(bytes.clone()),
                     pm_doc,
+                    theme,
                     &message,
                     &author_id,
                 )?;
@@ -300,7 +339,7 @@ impl App {
                 // 冲突错误而不是容器解析错误。
                 Self::check_external_change(&store, expected)?;
                 let (out, mut resp) =
-                    Self::produce_container_bytes(&store, pm_doc, &message, &author_id)?;
+                    Self::produce_container_bytes(&store, pm_doc, theme, &message, &author_id)?;
                 let path = store.path().expect("File store 必有 path").to_path_buf();
                 // 第 6 步：原子替换（管线与落盘之间仍同一把锁，无窗口）
                 doc_store::atomic_write(&path, &out)
@@ -320,7 +359,7 @@ impl App {
         body: &Value,
         overwrite: bool,
     ) -> Result<Value, ApiError> {
-        let (pm_doc, message, author_id) = Self::parse_save_body(body)?;
+        let (pm_doc, theme, message, author_id) = Self::parse_save_body(body)?;
         if !overwrite && target.exists() {
             return Err(ApiError::BadRequest(format!(
                 "目标已存在: {}",
@@ -328,7 +367,8 @@ impl App {
             )));
         }
         let mut store = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        let (out, mut resp) = Self::produce_container_bytes(&store, pm_doc, &message, &author_id)?;
+        let (out, mut resp) =
+            Self::produce_container_bytes(&store, pm_doc, theme, &message, &author_id)?;
         doc_store::atomic_write(&target, &out)
             .map_err(|e| ApiError::Doc(format!("写入 {} 失败: {e}", target.display())))?;
         store.bind_file(target.clone());

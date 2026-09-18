@@ -27,6 +27,7 @@ import { schema } from "../schema";
 import type { DocumentGateway, DocResponse, JobRequest, JobSnapshot, SaveResult } from "../platform/gateway";
 import { SessionStore } from "./session-store";
 import { askText } from "../ui/dialogs";
+import { DEFAULT_PAGE_THEME, normalizePageTheme, pageThemesEqual, type PageTheme } from "./theme";
 
 export interface ControllerHooks {
   /** 状态栏/标题/按钮刷新。 */
@@ -51,6 +52,8 @@ export class DocumentController {
   private host: HTMLElement;
   /** 保存基线文档（保存/打开确认的快照）。 */
   private baseline: PMNode | null = null;
+  private pageTheme: PageTheme = DEFAULT_PAGE_THEME;
+  private baselinePageTheme: PageTheme = DEFAULT_PAGE_THEME;
   /** 是否处于 IME 组合输入。 */
   composing = false;
   private recoveryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -69,7 +72,29 @@ export class DocumentController {
   /** 脏标记 = 当前 doc 与保存基线结构不等价（selection/滚动不触发）。 */
   private recomputeDirty(): void {
     if (!this.view || !this.baseline) return;
-    this.store.setDirty(!this.view.state.doc.eq(this.baseline));
+    this.store.setDirty(!this.view.state.doc.eq(this.baseline) || !pageThemesEqual(this.pageTheme, this.baselinePageTheme));
+  }
+
+  get currentPageTheme(): PageTheme {
+    return this.pageTheme;
+  }
+
+  setPageTheme(theme: PageTheme): void {
+    this.pageTheme = normalizePageTheme(theme);
+    this.applyPageThemeToWorkspace();
+    this.recomputeDirty();
+    this.hooks.onStateChange();
+  }
+
+  private applyPageThemeToWorkspace(): void {
+    const page = this.host.closest(".page") as HTMLElement | null;
+    if (!page) return;
+    const mmToPx = (mm: number) => `${Math.round(mm * 3.78)}px`;
+    const { top, right, bottom, left } = this.pageTheme.margins;
+    page.style.padding = `${mmToPx(top)} ${mmToPx(right)} ${mmToPx(bottom)} ${mmToPx(left)}`;
+    page.style.maxWidth = this.pageTheme.orientation === "landscape" ? "1060px" : "820px";
+    page.dataset.pageSize = this.pageTheme.pageSize;
+    page.dataset.orientation = this.pageTheme.orientation;
   }
 
   // ---------------------------------------------------------------- 挂载
@@ -173,6 +198,9 @@ export class DocumentController {
     this.view?.destroy();
     this.view = this.createEditor(d.pm_doc);
     this.baseline = this.view.state.doc;
+    this.pageTheme = normalizePageTheme(d.theme);
+    this.baselinePageTheme = normalizePageTheme(d.theme);
+    this.applyPageThemeToWorkspace();
     this.store.setDirty(false);
     this.hooks.onDocMeta(d);
     this.refreshDerivedUI();
@@ -189,6 +217,8 @@ export class DocumentController {
     this.view?.destroy();
     this.view = this.createEditor(pmDoc);
     this.baseline = null; // 恢复内容未落盘：恒脏
+    this.pageTheme = { ...DEFAULT_PAGE_THEME, margins: { ...DEFAULT_PAGE_THEME.margins } };
+    this.baselinePageTheme = { ...this.pageTheme, margins: { ...this.pageTheme.margins } };
     this.store.setDirty(true);
     this.refreshDerivedUI();
   }
@@ -294,6 +324,7 @@ export class DocumentController {
     const capturedGeneration = s.editGeneration;
     const body = {
       pm_doc: snapshot.toJSON(),
+      theme: this.pageTheme,
       message: (document.getElementById("message") as HTMLInputElement | null)?.value.trim() || undefined,
       author_id: "local",
       expected_fingerprint: s.fingerprint ?? undefined,
@@ -324,6 +355,7 @@ export class DocumentController {
       // dialog/request was in flight remains dirty and will be queued below.
       if (this.view?.state.doc.eq(snapshot) && this.store.state.editGeneration === capturedGeneration) {
         this.baseline = snapshot;
+        this.baselinePageTheme = this.pageTheme;
       }
       this.store.saveSucceeded(
         result.fingerprint ?? null,
@@ -370,6 +402,7 @@ export class DocumentController {
     const capturedGeneration = s.editGeneration;
     const body = {
       pm_doc: snapshot.toJSON(),
+      theme: this.pageTheme,
       message: undefined,
       author_id: "local",
     };
@@ -378,6 +411,7 @@ export class DocumentController {
       const doc = result.doc ?? result;
       if (this.view?.state.doc.eq(snapshot) && this.store.state.editGeneration === capturedGeneration) {
         this.baseline = snapshot;
+        this.baselinePageTheme = this.pageTheme;
       }
       this.store.saveSucceeded(doc.fingerprint ?? null, doc.revision ?? null, target);
       this.recomputeDirty();
@@ -557,7 +591,13 @@ export class DocumentController {
     const s = this.store.state;
     if (!view || !s.sessionId) return;
     try {
-      await this.gateway.writeRecovery(s.sessionId, this.recoveryGeneration, view.state.doc.toJSON(), s.path);
+    await this.gateway.writeRecovery(
+      s.sessionId,
+      this.recoveryGeneration,
+      view.state.doc.toJSON(),
+      s.path,
+      this.pageTheme,
+    );
     } catch {
       /* 草稿失败静默，不影响正文 */
     }
@@ -584,6 +624,7 @@ export class DocumentController {
           const pmDoc = draft["pm_doc"] as Record<string, unknown> | undefined;
           if (pmDoc) {
             this.mountRecovered(pmDoc, r.session_path);
+            if (draft["theme"]) this.setPageTheme(normalizePageTheme(draft["theme"]));
             this.hooks.onMessage(`已恢复草稿「${label}」，请另存为或保存。`, true);
             return;
           }
