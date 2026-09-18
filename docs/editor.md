@@ -107,3 +107,36 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows-smoke.ps1 -S
 
 CI 中 `windows-smoke` job 为 `workflow_dispatch` 手动触发
 （桌面冒烟昂贵且需真实窗口环境，不随每次 push 跑）。
+
+## 8. GUI 壳层契约（OpenDoc 改造）
+
+界面结构：顶栏（品牌/文档名/命令搜索/保存）→ 应用菜单（文件/编辑/插入/视图/
+文档检查）→ 页签功能区（开始/插入/视图/文档检查 + 上下文“表格”）→ 查找栏 →
+左导航轨 + 大纲面板 + 文档工作区 + 右侧检查面板 → 状态栏。
+
+- **单一命令契约**：菜单、功能区、命令面板（Ctrl+K）、快捷键、浮动格式条、
+  状态栏全部投影 `CommandRegistry` 的同一份 `Command` 元数据；任何入口不单独
+  实现命令逻辑。命令目录与启用条件冻结于 `docs/editor-gui-command-matrix.md`。
+- **能力投影**：桌面专属命令（新建/打开/另存/导入/导出/任务）经 `visible` 在
+  HTTP 模式不渲染入口；条件不满足的命令禁用并给出 `disabledReason`。
+- **上下文页签**：光标/选区进入表格自动选中“表格”页签（边沿触发，表格内
+  手动切走不被拉回）；离开表格恢复之前页签。浮动格式条只在非空文本选区出现。
+- **响应式**：功能区按容器宽度把低优先级组收进“更多”（无横向滚动）；
+  <1100px 左右面板变覆盖抽屉；<900px 插入/视图/文档检查菜单组收进“更多”；
+  页签/折叠/主题/面板开合为 localStorage 偏好，不进文档/undo。
+- **状态栏页数**只显示最近一次成功预览且快照未失效的分页结果；正文一代际
+  变化即失效——连续编辑布局不是 Word 分页。
+- **混合格式反射**：选区归并字符/段落格式；不一致的键显示“混合”而不是
+  最后一个 run 的值；反射只读，不写回正文。
+- **边界**：分页/WASM 编辑不在本壳层内；预览仍是 Paged.js + 回退路径，
+  正文继续走 ProseMirror 事务与 DocumentController 会话边界。
+
+## 9. 一键启动
+
+```powershell
+# 依赖预检（Node/Rust/WebView2）→ npm ci → 前端构建 → cargo run -p studio
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-studio.ps1
+# 跳过前端构建（沿用现有 dist）、或直接 dev 运行
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-studio.ps1 -SkipFrontendBuild
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-studio.ps1 -Dev
+```

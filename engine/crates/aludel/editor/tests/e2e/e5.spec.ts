@@ -35,6 +35,7 @@ test("theme-only change marks document dirty and enters save flow", async ({ pag
   await mountDoc(page);
   await expect(page.locator("#sb-save")).toHaveText("已保存");
   // 页面设置 → 纸张改 Letter → 应用
+  await page.locator("#tab-view").click();
   await page.locator("#m-page-settings").click();
   const dialog = page.locator(".page-settings-dialog");
   await expect(dialog).toBeVisible();

@@ -4,212 +4,22 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Athanor Studio</title>
-  <style>
-    :root { color-scheme: light; }
-    * { box-sizing: border-box; }
-    body { font-family: "Segoe UI", system-ui, sans-serif; margin: 0; background: #e9e5dc; color: #2c2620; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-    button { font-family: inherit; }
-    /* 键盘可达性：所有可交互控件键盘聚焦时给出可见焦点环（E6） */
-    button:focus-visible, a:focus-visible, input:focus-visible,
-    select:focus-visible, summary:focus-visible {
-      outline: 2px solid #8c5a2b; outline-offset: 1px;
-    }
-    .menubar button:focus-visible, .statusbar button:focus-visible,
-    .az-preview-bar button:focus-visible {
-      outline-color: #e8c36a;
-    }
-    #editor:focus-visible { outline: 2px solid #8c5a2b; outline-offset: -2px; }
-    /* 菜单栏 */
-    .menubar { display: flex; align-items: center; gap: 2px; padding: 4px 12px; background: #2c2620; color: #f6f4ef; font-size: 13px; }
-    .menubar .brand { font-weight: 600; letter-spacing: 2px; margin-right: 12px; font-size: 14px; }
-    .menubar button { background: none; border: 0; color: inherit; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; }
-    .menubar button:hover:not(:disabled) { background: rgba(255,255,255,.12); }
-    .menubar button:disabled { opacity: .35; cursor: default; }
-    .menubar .spacer { flex: 1; }
-    .menubar .doc-name { font-size: 12px; opacity: .8; }
-    /* 功能区 */
-    .ribbon { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 12px; background: #f6f2e9; border-bottom: 1px solid #ddd3bd; align-items: center; }
-    .ribbon .group { display: flex; gap: 2px; padding-right: 10px; border-right: 1px solid #ddd3bd; align-items: center; }
-    .ribbon .group:last-child { border-right: 0; }
-    .ribbon button { padding: 4px 10px; border: 1px solid transparent; border-radius: 4px; background: transparent; cursor: pointer; font-size: 13px; color: #2c2620; }
-    .ribbon button:hover:not(:disabled) { background: #ece4d2; border-color: #d8d0c0; }
-    .ribbon button:disabled { opacity: .4; cursor: default; }
-    .ribbon button.active { background: #e3d9bf; border-color: #b8a77f; }
-    .ribbon input[type="text"] { padding: 3px 8px; border: 1px solid #d8d0c0; border-radius: 4px; font-size: 13px; width: 90px; }
-    /* 查找栏 */
-    #findbar { display: none; gap: 6px; padding: 6px 12px; background: #fdfaf2; border-bottom: 1px solid #ddd3bd; align-items: center; flex-wrap: wrap; }
-    #findbar input[type="text"] { padding: 4px 8px; border: 1px solid #c9bfa8; border-radius: 4px; font-size: 13px; }
-    #findbar button { padding: 3px 10px; border: 1px solid #d8d0c0; border-radius: 4px; background: #fff; cursor: pointer; font-size: 12.5px; }
-    #find-count { font-size: 12px; color: #7a6a52; }
-    /* 主区 */
-    main { display: grid; grid-template-columns: 200px minmax(0, 1fr) 300px; gap: 0; flex: 1; min-height: 0; }
-    @media (max-width: 1100px) { main { grid-template-columns: 0 minmax(0, 1fr) 0; } .nav-pane, .side-pane { display: none; } }
-    .nav-pane { background: #f4f0e6; border-right: 1px solid #ddd3bd; overflow: auto; padding: 10px 8px; }
-    .nav-pane h2, .side-pane h2 { font-size: 11px; margin: 0 0 6px; color: #7a6a52; text-transform: uppercase; letter-spacing: 1px; }
-    .nav-pane ul { list-style: none; margin: 0; padding: 0; }
-    .nav-pane li { padding: 1px 0; }
-    .nav-pane a { color: #4a4036; text-decoration: none; font-size: 12.5px; display: block; padding: 2px 6px; border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .nav-pane a:hover { background: #e9e2d0; }
-    .workspace { overflow: auto; padding: 24px; display: flex; justify-content: center; }
-    .page { background: #fff; width: 100%; max-width: 820px; min-height: 100%; box-shadow: 0 1px 4px rgba(0,0,0,.12); border-radius: 2px; padding: 48px 64px; }
-    .side-pane { background: #f4f0e6; border-left: 1px solid #ddd3bd; overflow: auto; padding: 10px; }
-    .side-pane section { background: #fff; border: 1px solid #e4dcc8; border-radius: 6px; padding: 8px 10px; margin-bottom: 10px; }
-    .side-pane ul { margin: 0; padding-left: 16px; font-size: 12px; line-height: 1.7; }
-    /* 编辑区 */
-    #editor { min-height: 60vh; outline: none; }
-    #editor p { margin: .5em 0; line-height: 1.75; }
-    #editor blockquote { margin: .8em 0; padding: .2em 1em; border-left: 3px solid #c9b98f; color: #5c5244; background: #faf7ef; }
-    #editor pre { background: #2c2620; color: #efe9dc; padding: 12px 14px; border-radius: 6px; overflow: auto; }
-    #editor pre code { background: none; color: inherit; padding: 0; }
-    #editor code { background: #efe9dc; padding: 1px 5px; border-radius: 4px; font-size: .92em; }
-    #editor table { border-collapse: collapse; margin: .8em 0; }
-    #editor td { border: 1px solid #cfc4ab; padding: 6px 10px; min-width: 80px; }
-    #editor figure { margin: 1em 0; text-align: center; }
-    #editor img { max-width: 100%; height: auto; cursor: nwse-resize; }
-    #editor figcaption { font-size: 12.5px; color: #7a6a52; padding: 4px 0; }
-    #editor aside.az-footnote { background: #f4efe2; border: 1px dashed #cfc4ab; border-radius: 6px; padding: 8px 14px; font-size: .92em; margin: .8em 0; }
-    #editor div.az-callout { border: 1px solid #e0d7c4; border-left-width: 4px; border-radius: 6px; padding: 10px 14px; margin: .8em 0; background: #fbf8f0; }
-    #editor div.az-callout--warning { border-left-color: #c98a2b; background: #fdf6e8; }
-    #editor div.az-callout--danger, #editor div.az-callout--error { border-left-color: #a33c2f; background: #fbeeea; }
-    #editor div.az-math { background: #f4efe2; border-radius: 6px; padding: 10px 14px; font-family: Cambria, Georgia, serif; text-align: center; margin: .8em 0; cursor: pointer; }
-    #editor code.az-inline-math { font-family: Cambria, Georgia, serif; background: #f4efe2; cursor: pointer; }
-    #editor .az-unknown { background: repeating-linear-gradient(45deg, #f7f1e4, #f7f1e4 8px, #f2ecdd 8px, #f2ecdd 16px); border: 1px dashed #b3a37f; border-radius: 6px; padding: 10px 14px; margin: .8em 0; color: #6b5636; font-size: .95em; }
-    #editor .az-unknown--inline { display: inline; padding: 0 4px; margin: 0 2px; }
-    #editor .az-asset-placeholder { display: inline-block; background: #efe9dc; border: 1px dashed #b3a37f; border-radius: 6px; padding: 14px 18px; color: #6b5636; font-size: .9em; margin: .4em 0; }
-    #editor li[data-checked="true"]::before { content: "☑ "; cursor: pointer; }
-    #editor li[data-checked="false"]::before { content: "☐ "; cursor: pointer; }
-    #editor li[data-checked] { list-style: none; }
-    #editor .az-footnote-ref { color: #8c5a2b; cursor: default; }
-    #editor .az-mention { background: #e3ddf2; color: #55468a; border-radius: 4px; padding: 0 4px; }
-    #editor .az-cite { background: #dde8d5; color: #3d6b35; border-radius: 4px; padding: 0 4px; }
-    /* 手动分页（E4）：编辑器内可见的分页标记 */
-    #editor .az-page-break { margin: .8em 0; padding: 2px 0; border-top: 1px dashed #b3a37f; position: relative; }
-    #editor .az-page-break::after { content: "— 分页 —"; position: absolute; right: 8px; top: -10px; font-size: 11px; color: #a08a64; background: #fff; padding: 0 6px; }
-    #editor .az-page-break hr { border: 0; margin: 0; }
-    /* 打印预览浮层 */
-    .az-preview-overlay { position: fixed; inset: 0; background: #d8d2c4; display: flex; flex-direction: column; z-index: 60; }
-    .az-preview-bar { display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: #2c2620; color: #f6f4ef; }
-    .az-preview-status { font-size: 13px; }
-    .az-preview-spacer { flex: 1; }
-    .az-preview-bar button { background: #f6f2e9; border: 0; border-radius: 4px; padding: 5px 14px; cursor: pointer; font-size: 13px; }
-    .az-preview-bar button:disabled { opacity: .4; cursor: default; }
-    .az-preview-stage { flex: 1; display: flex; justify-content: center; overflow: hidden; }
-    .az-preview-frame { width: 100%; height: 100%; border: 0; background: #fff; }
-    /* 消息与状态栏 */
-    .bar { display: flex; gap: 8px; padding: 6px 12px; align-items: center; background: #f6f2e9; border-top: 1px solid #ddd3bd; }
-    .bar input { flex: 1; padding: 5px 10px; border: 1px solid #d8d0c0; border-radius: 5px; font-size: 13px; }
-    #msg { font-size: 12.5px; white-space: pre-wrap; padding: 2px 12px; min-height: 18px; background: #f6f2e9; }
-    .ok { color: #3d6b35; } .bad { color: #a33c2f; }
-    .statusbar { display: flex; align-items: center; gap: 14px; padding: 3px 12px; background: #2c2620; color: #d8d0c0; font-size: 12px; }
-    .statusbar .spacer { flex: 1; }
-    .statusbar button { background: none; border: 0; color: inherit; cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px; }
-    .statusbar button:hover { background: rgba(255,255,255,.12); }
-    #sb-save.dirty { color: #e8c36a; }
-    .tag { display: inline-block; padding: 0 6px; border-radius: 4px; font-size: 11px; background: #eee3cf; color: #6b5636; margin-right: 4px; }
-    .tag--human { background: #dde8d5; color: #3d6b35; }
-    .tag--ai { background: #e3ddf2; color: #55468a; }
-    .tag--importer { background: #e8e0cf; }
-    .detached { color: #a33c2f; }
-    .page-settings-dialog { border: 1px solid #c9bfa8; border-radius: 8px; padding: 18px; color: #2c2620; box-shadow: 0 8px 30px rgba(0,0,0,.22); }
-    .page-settings-dialog::backdrop { background: rgba(44,38,32,.35); }
-    .page-settings-dialog form { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 14px; min-width: 380px; }
-    .page-settings-dialog h2 { grid-column: 1 / -1; margin: 0 0 4px; font-size: 17px; }
-    .page-settings-dialog label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #6b5b48; }
-    .page-settings-dialog input, .page-settings-dialog select { padding: 5px 7px; border: 1px solid #c9bfa8; border-radius: 4px; background: #fff; color: #2c2620; }
-    .page-settings-dialog form > div { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; margin-top: 5px; }
-    .page-settings-dialog button { padding: 5px 12px; border: 1px solid #c9bfa8; border-radius: 4px; background: #f6f2e9; cursor: pointer; }
-  </style>
 </head>
 <body>
-  <div class="menubar" role="menubar" aria-label="主菜单">
-    <span class="brand">Athanor</span>
-    <button id="m-new" data-cmd="file.new">新建</button>
-    <button id="m-open" data-cmd="file.open">打开…</button>
-    <button id="m-save" data-cmd="file.save">保存</button>
-    <button id="m-saveas" data-cmd="file.saveAs">另存为…</button>
-    <button id="m-close" data-cmd="file.close">关闭</button>
-    <span class="spacer"></span>
-    <button id="m-import" data-cmd="job.import">导入…</button>
-    <button id="m-export" data-cmd="job.export">导出 Markdown…</button>
-    <button id="m-export-html" data-cmd="job.exportHtml">导出 HTML…</button>
-    <button id="m-export-text" data-cmd="job.exportText">导出纯文本…</button>
-    <button id="m-export-docx" data-cmd="job.exportDocx">导出 Word 文档…</button>
-    <button id="m-publish" data-cmd="job.publish">导出 PDF…</button>
-    <button id="m-preview" data-cmd="view.preview">打印预览</button>
-    <button id="m-page-settings" data-cmd="layout.pageSettings">页面设置…</button>
-    <button id="cancel-job" data-cmd="job.cancel">取消任务</button>
-    <button id="m-verify" data-cmd="file.verify">检查文档</button>
-    <span class="spacer"></span>
-    <span class="doc-name" id="doc-path">…</span>
-    <span class="doc-name">修订: <span id="rev">—</span></span>
+  <div class="topbar">
+    <div class="appbar">
+      <span class="brand">Athanor</span>
+      <span class="doc-name" id="doc-path">…</span>
+      <span class="doc-name">修订: <span id="rev">—</span></span>
+      <span class="spacer"></span>
+      <input class="cmd-search" id="cmdk-input" type="text" placeholder="命令搜索 (Ctrl+K)" aria-label="命令搜索" readonly />
+      <button id="topbar-save" data-cmd="file.save">保存</button>
+    </div>
+    <div class="menubar" role="menubar" aria-label="应用菜单" id="app-menus"></div>
   </div>
 
-  <div class="ribbon" role="toolbar" aria-label="编辑工具栏">
-    <div class="group">
-      <button id="tb-para" data-cmd="block.para">正文</button>
-      <button id="tb-h1" data-cmd="block.h1">标题1</button>
-      <button id="tb-h2" data-cmd="block.h2">标题2</button>
-      <button id="tb-h3" data-cmd="block.h3">标题3</button>
-      <button id="tb-quote" data-cmd="block.quote">引用</button>
-      <button id="tb-codeblock" data-cmd="block.codeblock">代码块</button>
-      <button id="tb-bullet" data-cmd="list.bullet">项目符号</button>
-      <button id="tb-ordered" data-cmd="list.ordered">编号</button>
-      <button id="tb-table" data-cmd="insert.table">表格</button>
-      <button id="tb-row-add" data-cmd="table.rowAdd">加行</button>
-      <button id="tb-col-add" data-cmd="table.colAdd">加列</button>
-      <button id="tb-row-del" data-cmd="table.rowDelete">删行</button>
-    <button id="tb-col-del" data-cmd="table.colDelete">删列</button>
-    <button id="tb-cell-merge" data-cmd="table.merge">合并单元格</button>
-    <button id="tb-cell-split" data-cmd="table.split">拆分单元格</button>
-      <button id="tb-image" data-cmd="insert.image">图片</button>
-    </div>
-    <div class="group">
-      <select id="tb-font" title="字体">
-        <option value="">字体</option>
-        <option value="宋体">宋体</option>
-        <option value="黑体">黑体</option>
-        <option value="微软雅黑">微软雅黑</option>
-        <option value="仿宋">仿宋</option>
-        <option value="楷体">楷体</option>
-        <option value="SimSun">SimSun</option>
-        <option value="Georgia">Georgia</option>
-        <option value="Consolas">Consolas</option>
-      </select>
-      <select id="tb-size" title="字号 (pt)">
-        <option value="">字号</option>
-        <option value="9">9</option><option value="10.5">10.5</option>
-        <option value="12">12</option><option value="14">14</option>
-        <option value="16">16</option><option value="18">18</option>
-        <option value="22">22</option><option value="26">26</option>
-        <option value="36">36</option>
-      </select>
-      <input type="color" id="tb-color" title="文字颜色" value="#000000" />
-      <input type="color" id="tb-highlight" title="高亮" value="#ffff00" />
-      <button id="tb-strong" data-cmd="format.strong"><b>B</b></button>
-      <button id="tb-em" data-cmd="format.em"><i>I</i></button>
-      <button id="tb-underline" data-cmd="format.underline"><u>U</u></button>
-      <button id="tb-strike" data-cmd="format.strike"><s>S</s></button>
-      <button id="tb-code" data-cmd="format.code">&lt;/&gt;</button>
-      <button id="tb-link" data-cmd="format.link">链接</button>
-    </div>
-    <div class="group">
-      <button id="tb-align-left" data-cmd="para.alignLeft" title="左对齐">⯇</button>
-      <button id="tb-align-center" data-cmd="para.alignCenter" title="居中">≡</button>
-      <button id="tb-align-right" data-cmd="para.alignRight" title="右对齐">⯈</button>
-      <button id="tb-align-justify" data-cmd="para.alignJustify" title="两端对齐">☰</button>
-      <button id="tb-indent-more" data-cmd="para.indentMore" title="增加缩进">⇥</button>
-      <button id="tb-indent-less" data-cmd="para.indentLess" title="减少缩进">⇤</button>
-      <button id="tb-clear-format" data-cmd="format.clear" title="清除格式">⌫格式</button>
-    </div>
-    <div class="group">
-      <button id="tb-math" data-cmd="insert.math">∑ 数学</button>
-      <button id="tb-footnote" data-cmd="insert.footnote">脚注</button>
-      <button id="tb-rule" data-cmd="insert.rule">分隔线</button>
-      <button id="tb-page-break" data-cmd="insert.pageBreak">分页符</button>
-      <button id="tb-undo" data-cmd="edit.undo">撤销</button>
-      <button id="tb-redo" data-cmd="edit.redo">重做</button>
-    </div>
-  </div>
+  <div class="tabbar" role="tablist" aria-label="功能区页签" id="ribbon-tabs"></div>
+  <div class="ribbon" role="toolbar" aria-label="编辑工具栏" id="ribbon-panel"></div>
 
   <div id="findbar" role="search" aria-label="查找与替换">
     <input type="text" id="find-input" placeholder="查找" />
@@ -226,14 +36,19 @@
   </div>
 
   <main>
-    <div class="nav-pane" aria-label="文档大纲">
+    <div class="rail" role="navigation" aria-label="导航轨" id="left-rail">
+      <button id="rail-outline" data-cmd="view.toggleOutline" title="大纲" aria-label="大纲面板">≡</button>
+      <button id="rail-find" data-cmd="edit.find" title="查找" aria-label="查找">⌕</button>
+    </div>
+    <div class="nav-pane" id="left-panel" aria-label="文档大纲">
       <h2>大纲</h2>
       <ul id="outline"></ul>
     </div>
     <div class="workspace">
       <div class="page"><div id="editor" aria-label="文档正文" role="textbox" aria-multiline="true"></div></div>
     </div>
-    <div class="side-pane" aria-label="文档信息面板">
+    <div class="side-pane inspector-pane" id="right-panel" aria-label="检查面板">
+      <section id="inspector-context"><h2>属性</h2><div id="inspector-body"></div></section>
       <section><h2>修订历史</h2><ul id="history"></ul></section>
       <section><h2>语义标注</h2><ul id="annotations"></ul></section>
       <section><h2>未知内容 / 损失盘点</h2><ul id="loss"></ul></section>
@@ -248,6 +63,9 @@
   <div class="statusbar" role="status" aria-label="状态栏">
     <span id="sb-chars">0 字</span>
     <span id="sb-save">已保存</span>
+    <span id="sb-page" title="最近预览分页结果"></span>
+    <span id="sb-mode">连续编辑</span>
+    <span id="sb-lang">中文</span>
     <span class="spacer"></span>
     <button id="sb-zoom-out" data-cmd="view.zoomOut" aria-label="缩小">−</button>
     <button id="sb-zoom-reset" data-cmd="view.zoomReset" aria-label="缩放还原"><span id="sb-zoom">100%</span></button>

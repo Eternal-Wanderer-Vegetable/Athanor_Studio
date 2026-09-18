@@ -64,6 +64,7 @@ test("keyboard: Escape closes preview overlay and restores focus", async ({ page
       },
     }),
   );
+  await page.locator("#tab-view").click();
   await page.locator("#m-preview").click();
   const overlay = page.locator(".az-preview-overlay");
   await expect(overlay).toBeVisible();
@@ -131,6 +132,7 @@ test("feature flag: printPreviewV1=0 disables preview entry", async ({ page }) =
   );
   await page.goto("/?flags=printPreviewV1:0");
   await expect(page.locator(".ProseMirror")).toBeVisible();
+  await page.locator("#tab-view").click();
   await page.locator("#m-preview").click();
   await expect(page.locator("#msg")).toContainText("打印预览功能已关闭");
   await expect(page.locator(".az-preview-overlay")).toHaveCount(0);
