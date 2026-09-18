@@ -231,7 +231,16 @@ fn save_pipeline_lands_human_revision_and_passes_verify() {
     edit_pm(&mut pm);
 
     let resp = app
-        .save(&json!({ "pm_doc": pm, "message": "M6.2 e2e", "author_id": "tester" }))
+        .save(&json!({
+            "pm_doc": pm,
+            "theme": {
+                "schema_version": "1.0",
+                "theme": "e2e",
+                "defaults": { "page": { "size": "Letter landscape", "margin": "30mm 18mm 22mm 18mm" } }
+            },
+            "message": "M6.2 e2e",
+            "author_id": "tester"
+        }))
         .expect("保存应成功");
     assert!(
         resp["revision"].as_str().unwrap().starts_with("rev_"),
@@ -246,6 +255,8 @@ fn save_pipeline_lands_human_revision_and_passes_verify() {
         "未受影响的标注必须 unchanged"
     );
     assert_eq!(resp["relocate"]["detached"].as_u64().unwrap(), 0);
+    let reopened = app.open().expect("保存后的主题应可重新打开");
+    assert_eq!(reopened["theme"]["theme"], "e2e");
 
     // 容器核验：human 修订落链、manifest 推进
     let mut c = read_container(&doc);
@@ -260,6 +271,10 @@ fn save_pipeline_lands_human_revision_and_passes_verify() {
     assert_eq!(
         c.manifest_typed().current_revision.as_deref(),
         resp["revision"].as_str()
+    );
+    assert_eq!(
+        c.manifest_value()["layers"]["presentation"]["path"],
+        "presentation/theme.json"
     );
     drop(c);
 
@@ -419,7 +434,7 @@ fn route_handles_raw_request_struct() {
     let resp = route(&app, &req);
     assert_eq!(resp.status, 200);
     let html = String::from_utf8(resp.body).unwrap();
-    assert!(html.contains("ALUDEL"));
+    assert!(html.contains("Athanor"));
 }
 
 #[test]
@@ -429,6 +444,6 @@ fn document_session_facade_reuses_core_operations() {
 
     let opened = session.open().expect("session open 应复用核心实现");
     assert_eq!(opened["pm_doc"]["type"], "doc");
-    assert_eq!(session.doc_path(), doc.as_path());
-    assert_eq!(session.verify()["ok"], true);
+    assert_eq!(session.doc_path().as_deref(), Some(doc.as_path()));
+    assert_eq!(session.verify().unwrap()["ok"], true);
 }

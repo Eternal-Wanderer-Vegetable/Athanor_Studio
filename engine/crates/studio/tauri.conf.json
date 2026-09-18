@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "studio.athanor.app",
   "build": {
-    "frontendDist": "ui"
+    "frontendDist": "../aludel/editor/dist"
   },
   "app": {
     "windows": [

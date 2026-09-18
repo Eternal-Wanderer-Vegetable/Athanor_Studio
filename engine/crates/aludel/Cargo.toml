@@ -12,4 +12,6 @@ azodoc-model = { path = "../azodoc-model" }
 azodoc-pm = { path = "../azodoc-pm" }
 athanor-cli = { path = "../athanor-cli" }
 serde_json.workspace = true
+sha2.workspace = true
+tempfile = "3"
 thiserror.workspace = true

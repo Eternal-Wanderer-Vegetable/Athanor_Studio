@@ -17,4 +17,5 @@ tempfile = "3"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 tauri = { version = "2.8.5", features = ["devtools"] }
+tauri-plugin-dialog = "2"
 thiserror.workspace = true

@@ -307,6 +307,9 @@ fn check_node(
         asset_refs.push((path.to_string(), asset.to_string()));
     }
 
+    // 格式扩展（x-athanor-format）：受控键值校验，未知键忽略
+    check_format_extension(node, path, issues);
+
     // 递归子节点
     for key in ["children", "items"] {
         if let Some(children) = obj.get(key).and_then(Value::as_array) {
@@ -461,6 +464,7 @@ fn check_spans(
         if let Some(asset) = span.get("asset").and_then(Value::as_str) {
             asset_refs.push((path.clone(), asset.to_string()));
         }
+        check_format_extension(span, &path, issues);
         if let Some(content) = span.get("content").and_then(Value::as_array) {
             check_spans(
                 content,
@@ -470,6 +474,108 @@ fn check_spans(
                 issues,
                 asset_refs,
             );
+        }
+    }
+}
+
+/// x-athanor-format 扩展校验：只校验受控键的取值域；未知键/其他 extra 原样放行。
+fn check_format_extension(node: &Value, path: &str, issues: &mut Vec<Issue>) {
+    let Some(fmt) = node
+        .as_object()
+        .and_then(|o| o.get("x-athanor-format"))
+        .and_then(Value::as_object)
+    else {
+        return;
+    };
+    let fpath = format!("{path}.x-athanor-format");
+
+    if let Some(para) = fmt.get("paragraph").and_then(Value::as_object) {
+        if let Some(align) = para.get("align").and_then(Value::as_str) {
+            if !matches!(align, "left" | "center" | "right" | "justify") {
+                issues.push(Issue::error(
+                    "format.align",
+                    format!("{fpath}.paragraph.align"),
+                    format!("align 必须是 left|center|right|justify，实际为 `{align}`"),
+                ));
+            }
+        }
+        for key in [
+            "indentStartPt",
+            "indentEndPt",
+            "firstLinePt",
+            "spaceBeforePt",
+            "spaceAfterPt",
+        ] {
+            if let Some(v) = para.get(key) {
+                match v.as_f64() {
+                    Some(n) if (0.0..=999.0).contains(&n) => {}
+                    _ => issues.push(Issue::error(
+                        "format.range",
+                        format!("{fpath}.paragraph.{key}"),
+                        format!("{key} 必须是 0–999 的数值（pt）"),
+                    )),
+                }
+            }
+        }
+        if let Some(v) = para.get("lineHeight") {
+            match v.as_f64() {
+                Some(n) if (0.5..=5.0).contains(&n) => {}
+                _ => issues.push(Issue::error(
+                    "format.lineHeight",
+                    format!("{fpath}.paragraph.lineHeight"),
+                    "lineHeight 必须是 0.5–5.0 的倍数",
+                )),
+            }
+        }
+    }
+
+    if let Some(ch) = fmt.get("character").and_then(Value::as_object) {
+        if let Some(v) = ch.get("fontSizePt") {
+            match v.as_f64() {
+                Some(n) if (1.0..=999.0).contains(&n) => {}
+                _ => issues.push(Issue::error(
+                    "format.fontSizePt",
+                    format!("{fpath}.character.fontSizePt"),
+                    "fontSizePt 必须是 1–999 的数值",
+                )),
+            }
+        }
+        for key in ["color", "highlight"] {
+            if let Some(s) = ch.get(key).and_then(Value::as_str) {
+                let ok = s.len() == 7
+                    && s.starts_with('#')
+                    && s[1..].bytes().all(|b| b.is_ascii_hexdigit());
+                if !ok {
+                    issues.push(Issue::error(
+                        "format.color",
+                        format!("{fpath}.character.{key}"),
+                        format!("{key} 必须是 #RRGGBB 形式，实际为 `{s}`"),
+                    ));
+                }
+            }
+        }
+        if let Some(fam) = ch.get("fontFamily").and_then(Value::as_str) {
+            if fam.is_empty()
+                || fam.len() > 200
+                || fam
+                    .bytes()
+                    .any(|b| matches!(b, b'\'' | b'"' | b';' | b'{' | b'}' | b'<' | b'>'))
+            {
+                issues.push(Issue::error(
+                    "format.fontFamily",
+                    format!("{fpath}.character.fontFamily"),
+                    "fontFamily 含非法字符或超长",
+                ));
+            }
+        }
+        if let Some(va) = ch.get("verticalAlign").and_then(Value::as_str) {
+            if !matches!(va, "sub" | "super") {
+                issues.push(Issue::error(
+                    "format.verticalAlign",
+                    format!("{fpath}.character.verticalAlign"),
+                    "verticalAlign 必须是 sub|super",
+                ));
+            }
         }
     }
 }

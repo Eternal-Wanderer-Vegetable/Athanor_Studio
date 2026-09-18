@@ -19,9 +19,14 @@
 //! open/save/verify semantics to the Aludel application core. Keeping this
 //! boundary separate from transport code lets Tauri commands reuse the same
 //! seven-step save pipeline without embedding an HTTP server.
+//!
+//! A session bound to a file path uses that path as its identity key; an
+//! unsaved draft uses a generated `doc_*` key and rebinding happens through
+//! [`DocumentSession::save_as`], which returns the new key after success.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
+use azodoc_model::id::{AzodocId, IdKind};
 use serde_json::Value;
 
 use crate::api::{ApiError, App};
@@ -41,9 +46,23 @@ impl DocumentSession {
         }
     }
 
-    /// Return the path bound to this session.
-    pub fn doc_path(&self) -> &Path {
+    /// Create an unsaved draft session from container bytes.
+    pub fn new_draft(container_bytes: Vec<u8>) -> Self {
+        Self {
+            app: App::new_draft(container_bytes),
+        }
+    }
+
+    /// Stable identity for this session: the bound path, or a draft marker.
+    /// For drafts this is generated per-session by the caller via
+    /// [`DocumentSession::draft_key`].
+    pub fn doc_path(&self) -> Option<PathBuf> {
         self.app.doc_path()
+    }
+
+    /// Generate a fresh draft session key (`doc_<ULID>`).
+    pub fn draft_key() -> String {
+        AzodocId::generate(IdKind::Doc).as_str().to_string()
     }
 
     /// Open the document and return its PM state and auxiliary layers.
@@ -56,8 +75,28 @@ impl DocumentSession {
         self.app.save(body)
     }
 
+    /// Save-as: write the pipeline output to `target` and rebind the session.
+    pub fn save_as(
+        &self,
+        target: PathBuf,
+        body: &Value,
+        overwrite: bool,
+    ) -> Result<Value, ApiError> {
+        self.app.save_at(target, body, overwrite)
+    }
+
+    /// Current content fingerprint (SHA-256 of the container bytes).
+    pub fn fingerprint(&self) -> Result<String, ApiError> {
+        self.app.fingerprint()
+    }
+
     /// Verify the bound document using the engine verifier.
-    pub fn verify(&self) -> Value {
+    pub fn verify(&self) -> Result<Value, ApiError> {
         self.app.verify()
+    }
+
+    /// Whether the session is bound to an on-disk path.
+    pub fn is_file_backed(&self) -> bool {
+        self.doc_path().is_some()
     }
 }

@@ -39,6 +39,32 @@ env:
   CARGO_PROFILE_TEST_DEBUG: "0"
 
 jobs:
+  editor:
+    name: editor (build and interaction tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: engine/crates/aludel/editor/package-lock.json
+      - name: Install editor dependencies
+        working-directory: engine/crates/aludel/editor
+        run: npm ci
+      - name: Build editor bundle
+        working-directory: engine/crates/aludel/editor
+        run: npm run build
+      - name: Unit tests
+        working-directory: engine/crates/aludel/editor
+        run: npm test -- --reporter=dot
+      - name: Install Playwright browser
+        working-directory: engine/crates/aludel/editor
+        run: npx playwright install --with-deps chromium
+      - name: Browser interaction tests
+        working-directory: engine/crates/aludel/editor
+        run: npm run test:e2e
+
   schema:
     name: Schema structure and golden samples
     runs-on: ubuntu-latest
