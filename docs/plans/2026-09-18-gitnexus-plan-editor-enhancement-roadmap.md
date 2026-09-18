@@ -788,3 +788,9 @@ Confirmed facts are listed in §§2–5. The following must be decided in E0/E1 
 5. 预览/PDF/打印使用同一 snapshot；页数/页码有真实排版回执；失败不改变文档。
 6. theme-only 历史与恢复可解释；DOCX 能力矩阵来自 LossLog/report schema，未支持内容有保留或提示。
 7. `npm`、Rust 全量检查和 Windows WebView2/high DPI/键盘 smoke 通过，性能基线已记录且无未解释回归。
+
+## 14. Execution Log
+
+- **E0** `f9411ae`：契约冻结（§4.1–4.3/§5.3/§9b/§6.5/§11）、schema、TableCell.role/TableColumn.width、table.irregular Warning、theme 快照 verify、8 个确定性夹具（`corpus/editor/`）。全量 cargo/npm/playwright 绿。
+- **E1** `05e16cd`：会话级资产暂存（mime 白名单/32 MiB/文件名消毒）+ 保存管线落库（staged→embedded、data:→迁移、http(s)→external）+ `GET /api/asset/<id>`（embedded 直出、external 302）+ Tauri `azodoc-asset://` 协议与 `stage_asset`/`read_asset` 命令 + 前端 stageAsset/assetUrl/插入粘贴拖入统一入口/双击改 alt。e2e 覆盖往返、迁移、悬空告警、未引用不落库。全量绿。
+- 偏差记录：图片"尺寸/对齐"属性面板未做——Prima image 节点未建模这些字段（E2 视情况评估）；SVG 不在暂存白名单（脚本面风险）；外链显示走服务端 302 而非内嵌代理。
