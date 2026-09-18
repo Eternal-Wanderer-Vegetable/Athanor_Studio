@@ -37,7 +37,8 @@ pub struct Request {
 
 pub struct Response {
     pub status: u16,
-    pub content_type: &'static str,
+    pub content_type: String,
+    pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
 }
 
@@ -45,7 +46,8 @@ impl Response {
     pub fn json(v: &serde_json::Value) -> Self {
         Response {
             status: 200,
-            content_type: "application/json; charset=utf-8",
+            content_type: "application/json; charset=utf-8".to_string(),
+            headers: Vec::new(),
             body: serde_json::to_vec(v).unwrap_or_else(|_| b"{}".to_vec()),
         }
     }
@@ -59,8 +61,29 @@ impl Response {
     pub fn html(doc: &str) -> Self {
         Response {
             status: 200,
-            content_type: "text/html; charset=utf-8",
+            content_type: "text/html; charset=utf-8".to_string(),
+            headers: Vec::new(),
             body: doc.as_bytes().to_vec(),
+        }
+    }
+
+    /// 任意 MIME 的二进制响应（资产字节）。
+    pub fn bytes(mime: String, body: Vec<u8>) -> Self {
+        Response {
+            status: 200,
+            content_type: mime,
+            headers: Vec::new(),
+            body,
+        }
+    }
+
+    /// 302 重定向（external 资产 → 原始 URL）。
+    pub fn redirect(location: &str) -> Self {
+        Response {
+            status: 302,
+            content_type: "text/plain; charset=utf-8".to_string(),
+            headers: vec![("Location".to_string(), location.to_string())],
+            body: Vec::new(),
         }
     }
 }
@@ -68,6 +91,7 @@ impl Response {
 fn reason(status: u16) -> &'static str {
     match status {
         200 => "OK",
+        302 => "Found",
         400 => "Bad Request",
         404 => "Not Found",
         405 => "Method Not Allowed",
@@ -171,13 +195,17 @@ fn read_request(stream: &mut TcpStream) -> std::io::Result<Outcome> {
 }
 
 fn write_response(stream: &mut TcpStream, resp: &Response) -> std::io::Result<()> {
-    let head = format!(
-        "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+    let mut head = format!(
+        "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n",
         resp.status,
         reason(resp.status),
         resp.content_type,
         resp.body.len()
     );
+    for (k, v) in &resp.headers {
+        head.push_str(&format!("{k}: {v}\r\n"));
+    }
+    head.push_str("\r\n");
     stream.write_all(head.as_bytes())?;
     stream.write_all(&resp.body)?;
     stream.flush()

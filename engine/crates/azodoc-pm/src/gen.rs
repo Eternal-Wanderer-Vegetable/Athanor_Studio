@@ -23,7 +23,7 @@
 
 use serde_json::{json, Map, Value};
 
-use crate::mapping::{AttrDef, MARKS, NODES};
+use crate::mapping::{pm_attr_name, table_role, AttrDef, MARKS, NODES};
 
 fn attrs_json(attrs: &[AttrDef]) -> Value {
     let mut out = Map::new();
@@ -31,12 +31,18 @@ fn attrs_json(attrs: &[AttrDef]) -> Value {
         let default = match a.spec {
             crate::mapping::AttrSpec::Text(s) => json!(s),
             crate::mapping::AttrSpec::Int(i) => json!(i),
+            // 跨度 attr 的 PM 默认是 1——TableMap 拿 attrs.colspan/rowspan
+            // 直接做算术，null 会让整表 zero_sized。
+            crate::mapping::AttrSpec::Span => json!(1),
             crate::mapping::AttrSpec::OptText
             | crate::mapping::AttrSpec::OptInt
             | crate::mapping::AttrSpec::OptBool
             | crate::mapping::AttrSpec::OptJson => Value::Null,
         };
-        out.insert(a.name.to_string(), json!({ "default": default }));
+        out.insert(
+            pm_attr_name(a.name).to_string(),
+            json!({ "default": default }),
+        );
     }
     Value::Object(out)
 }
@@ -59,6 +65,12 @@ pub fn schema_spec() -> Value {
         }
         if d.code {
             spec.insert("code".into(), json!(true));
+        }
+        // prosemirror-tables 角色：tableEditing/columnResizing/TableMap 依此工作；
+        // 表格成员节点同时需要 isolating（防止事务意外拆散结构）。
+        if let Some(role) = table_role(d.pm_name) {
+            spec.insert("tableRole".into(), json!(role));
+            spec.insert("isolating".into(), json!(true));
         }
         if !d.attrs.is_empty() {
             spec.insert("attrs".into(), attrs_json(d.attrs));

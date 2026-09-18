@@ -853,10 +853,18 @@ pub fn cmd_transmute(
     );
     print_loss_summary(&log);
 
-    // 刷新兼容缓存 + 登记 report
+    // 刷新兼容缓存 + 登记 report（DOCX 附带能力矩阵：导出前扫描内容树）
     let mut cache_note = String::new();
     if !no_cache {
-        match refresh_cache(&mut c, &fmt, compat, &bytes, &content_bytes, &log) {
+        match refresh_cache(
+            &mut c,
+            &fmt,
+            compat,
+            &bytes,
+            &content_bytes,
+            &log,
+            &doc.content,
+        ) {
             Ok(()) => match c.write() {
                 Ok(new_bytes) => {
                     if let Err(e) = std::fs::write(path, new_bytes) {
@@ -903,6 +911,7 @@ fn collect_payload_refs(v: &Value, refs: &mut Vec<String>) {
 }
 
 /// upsert 兼容缓存条目 + 追加导出报告。
+/// `content` 为 content.json 完整 Value（DOCX 能力矩阵扫描用）。
 fn refresh_cache(
     c: &mut Container,
     fmt: &str,
@@ -910,6 +919,7 @@ fn refresh_cache(
     bytes: &[u8],
     content_bytes: &[u8],
     log: &LossLog,
+    content: &Value,
 ) -> Result<(), ContainerError> {
     let mut manifest = c.manifest_value().clone();
     let now = now_rfc3339();
@@ -934,7 +944,7 @@ fn refresh_cache(
 
     let prefix = format!("export-{fmt}");
     let seq = next_report_seq(&manifest, &prefix);
-    let report = build_report(
+    let mut report = build_report(
         &ReportMeta {
             direction: "export",
             source_format: "azodoc",
@@ -952,6 +962,10 @@ fn refresh_cache(
         },
         log,
     );
+    // DOCX 导出能力矩阵（版本化；报告 schema additionalProperties 允许扩展成员）
+    if fmt == "docx" {
+        report["capabilities"] = azodoc_docx::capabilities::capability_matrix(content);
+    }
     let report_bytes = pretty(&report);
     let report_path = format!("reports/{prefix}-{seq:04}.json");
     if let Some(arr) = manifest.get_mut("reports").and_then(Value::as_array_mut) {

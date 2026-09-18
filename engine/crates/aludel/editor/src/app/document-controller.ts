@@ -21,10 +21,15 @@ import { EditorView } from "prosemirror-view";
 import { baseKeymap } from "prosemirror-commands";
 import { keymap } from "prosemirror-keymap";
 import { liftListItem, sinkListItem, splitListItem } from "prosemirror-schema-list";
+import { columnResizing, tableEditing } from "prosemirror-tables";
+import { flag } from "../flags";
 import { history, undo, redo } from "prosemirror-history";
+import { sanitizeHtml, sanitizeNotice, type PasteMode } from "./clipboard";
+import { mathNodeViews } from "./math-view";
+import { footnoteClick, footnoteDanglingPlugin } from "./footnotes";
 import type { Node as PMNode } from "prosemirror-model";
-import { schema } from "../schema";
-import type { DocumentGateway, DocResponse, JobRequest, JobSnapshot, SaveResult } from "../platform/gateway";
+import { schema, setAssetResolver } from "../schema";
+import type { DocumentGateway, DocResponse, JobRequest, JobSnapshot, PreviewResult, SaveResult } from "../platform/gateway";
 import { SessionStore } from "./session-store";
 import { askText } from "../ui/dialogs";
 import { DEFAULT_PAGE_THEME, normalizePageTheme, pageThemesEqual, type PageTheme } from "./theme";
@@ -43,6 +48,9 @@ export interface ControllerHooks {
 }
 
 const RECOVERY_DEBOUNCE_MS = 2_000;
+const STATS_DEBOUNCE_MS = 200;
+/** 客户端预检的资产字节上限（服务端同值；超限在 stage 前给出可读提示）。 */
+const MAX_ASSET_BYTES = 32 * 1024 * 1024;
 
 export class DocumentController {
   view: EditorView | null = null;
@@ -58,6 +66,9 @@ export class DocumentController {
   composing = false;
   private recoveryTimer: ReturnType<typeof setTimeout> | null = null;
   private recoveryGeneration = 0;
+  private statsTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 最近一次 Ctrl/Alt/Shift+V 决定的粘贴模式（ClipboardEvent 无修饰键）。 */
+  private pendingPasteMode: PasteMode | null = null;
 
   constructor(host: HTMLElement, gateway: DocumentGateway, hooks: ControllerHooks) {
     this.host = host;
@@ -82,7 +93,11 @@ export class DocumentController {
   setPageTheme(theme: PageTheme): void {
     this.pageTheme = normalizePageTheme(theme);
     this.applyPageThemeToWorkspace();
+    // 主题与正文共用同一代数：theme-only 修改同样推进代际、
+    // 排队在途保存后的补存，并纳入恢复草稿（E5）。
+    this.store.markEdited();
     this.recomputeDirty();
+    this.scheduleRecovery();
     this.hooks.onStateChange();
   }
 
@@ -99,12 +114,72 @@ export class DocumentController {
 
   // ---------------------------------------------------------------- 挂载
 
+  /** 图片文件 → 服务端暂存 → 插入 image 节点（粘贴/拖放/插入命令共用入口）。
+   *  正文写 `asset://<as_id>/<filename>`；字节随下次保存落库。
+   *  dropPos 给出时插入到指定位置，否则替换当前选区。 */
+  async insertImageFile(file: File, alt?: string, dropPos?: number): Promise<void> {
+    const v = this.view;
+    if (!v) return;
+    if (!flag("assetRegistryV2")) {
+      // 旗标关闭：图片暂存/插入入口整体停用（旧包仍安全读取既有 asset://）
+      this.hooks.onMessage("图片资产功能已关闭。", false);
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      this.hooks.onMessage("不是图片文件。", false);
+      return;
+    }
+    if (file.size > MAX_ASSET_BYTES) {
+      this.hooks.onMessage(`图片过大（上限 ${Math.round(MAX_ASSET_BYTES / 1024 / 1024)} MB）。`, false);
+      return;
+    }
+    try {
+      const dataBase64 = await fileToBase64(file);
+      if (this.view !== v) return;
+      const staged = await this.gateway.stageAsset(this.store.state.sessionId, {
+        filename: file.name || "pasted.png",
+        mime: file.type,
+        dataBase64,
+      });
+      if (this.view !== v) return;
+      const image = schema.nodes.image.create({
+        id: makeEditorId("blk"),
+        asset: staged.url,
+        alt: alt ?? file.name,
+      });
+      if (dropPos !== undefined) {
+        try {
+          v.dispatch(v.state.tr.insert(dropPos, image).scrollIntoView());
+          return;
+        } catch {
+          // 目标位置不接受该节点：退回替换当前选区
+        }
+      }
+      v.dispatch(v.state.tr.replaceSelectionWith(image).scrollIntoView());
+    } catch (e) {
+      this.hooks.onMessage(`图片暂存失败: ${errText(e)}`, false);
+    }
+  }
+
   private createEditor(docJson: Record<string, unknown>): EditorView {
     const doc = schema.nodeFromJSON(docJson);
     return new EditorView(this.host, {
       state: EditorState.create({
         doc,
         plugins: [
+          // 表格编辑栈先于自定义 keymap：tableEditing 自带 CellSelection
+          // 与 Tab/Shift-Tab 格间导航；columnResizing 写 cell colwidth
+          // （保存时归并进 columns[].width，spec §6.5）。不装 fixTables 自动
+          // 修复——不规则表只诊断，修复走显式 table.fix 命令。
+          // tableSelectionV2 关闭：退回纯文本式表格编辑（无单元格选区/列宽拖拽）
+          ...(flag("tableSelectionV2") ? [columnResizing({ cellMinWidth: 24 }), tableEditing()] : []),
+          // 脚注定义被删且仍有引用 → 一次性提示（撤销可恢复；保存侧仍是硬门槛）
+          footnoteDanglingPlugin((ids) => {
+            this.hooks.onMessage(
+              `脚注定义已删除，${ids.length} 处引用失去目标——可撤销恢复，否则保存将被拒绝`,
+              false,
+            );
+          }),
           keymap({
             Enter: splitListItem(schema.nodes.list_item),
             Tab: sinkListItem(schema.nodes.list_item),
@@ -116,35 +191,70 @@ export class DocumentController {
         ],
       }),
       attributes: { spellcheck: "false" },
+      nodeViews: mathNodeViews(),
       handleDoubleClickOn: (v, _pos, node, nodePos) => {
-        if (node.type.name !== "math_block" && node.type.name !== "inline_math") return false;
-        const current = String(node.attrs.latex ?? "");
-        void askText("LaTeX 源码", current).then((next) => {
-          if (next !== null && this.view === v) v.dispatch(v.state.tr.setNodeAttribute(nodePos, "latex", next));
-        });
-        return true;
+        if (node.type.name === "math_block" || node.type.name === "inline_math") {
+          const current = String(node.attrs.latex ?? "");
+          void askText("LaTeX 源码", current).then((next) => {
+            if (next !== null && this.view === v) v.dispatch(v.state.tr.setNodeAttribute(nodePos, "latex", next));
+          });
+          return true;
+        }
+        if (node.type.name === "image" || node.type.name === "figure" || node.type.name === "inline_image") {
+          const current = String(node.attrs.alt ?? "");
+          void askText("替代文字（无障碍，必填可读描述）", current).then((next) => {
+            if (next !== null && this.view === v) v.dispatch(v.state.tr.setNodeAttribute(nodePos, "alt", next));
+          });
+          return true;
+        }
+        return false;
       },
       handleDOMEvents: {
+        // 粘贴模式 = 最近一次带修饰的 V 组合键（ClipboardEvent 本身无修饰键）：
+        // Ctrl+V keep / Ctrl+Alt+V match / Ctrl+Shift+V plain；菜单/右键粘贴按 keep。
+        keydown: (_v, event) => {
+          const e = event as KeyboardEvent;
+          const isV = (e.key ?? "").toLowerCase() === "v";
+          if (isV && (e.ctrlKey || e.metaKey)) {
+            this.pendingPasteMode = e.shiftKey ? "plain" : e.altKey ? "match" : "keep";
+          }
+          return false;
+        },
         paste: (v, event) => {
           const clipboard = event.clipboardData;
           const file = clipboard?.files?.[0];
-          if (!file || !file.type.startsWith("image/")) return false;
-          if (file.size > 10 * 1024 * 1024) {
-            this.hooks.onMessage("图片过大（上限 10 MB）。", false);
+          if (file && file.type.startsWith("image/")) {
+            event.preventDefault();
+            void this.insertImageFile(file);
             return true;
           }
+          const html = clipboard?.getData("text/html");
+          const text = clipboard?.getData("text/plain");
+          const mode = this.pendingPasteMode ?? "keep";
+          this.pendingPasteMode = null;
+          if (mode === "plain") {
+            if (!text) return false;
+            event.preventDefault();
+            v.pasteText(text);
+            return true;
+          }
+          if (html) {
+            event.preventDefault();
+            const r = sanitizeHtml(html, mode);
+            v.pasteHTML(r.html);
+            const note = sanitizeNotice(r);
+            if (note) this.hooks.onMessage(note, true);
+            return true;
+          }
+          return false; // 纯文本无 HTML：交给 PM 默认文本粘贴
+        },
+        click: (v, event) => footnoteClick(v, event),
+        drop: (v, event) => {
+          const file = event.dataTransfer?.files?.[0];
+          if (!file || !file.type.startsWith("image/")) return false;
           event.preventDefault();
-          const reader = new FileReader();
-          reader.onload = () => {
-            if (typeof reader.result !== "string" || this.view !== v) return;
-            const image = schema.nodes.image.create({
-              id: makeEditorId("blk"),
-              asset: reader.result,
-              alt: file.name,
-            });
-            v.dispatch(v.state.tr.replaceSelectionWith(image));
-          };
-          reader.readAsDataURL(file);
+          const pos = v.posAtCoords({ left: event.clientX, top: event.clientY })?.pos;
+          void this.insertImageFile(file, undefined, pos);
           return true;
         },
         mousedown: (v, event) => {
@@ -195,6 +305,9 @@ export class DocumentController {
       fingerprint: d.fingerprint,
       displayName,
     });
+    // 资产解析器绑定当前会话（asset:// → gateway 的展示 URL）
+    const sessionId = result.sessionId;
+    setAssetResolver((ref) => this.gateway.assetUrl(sessionId, ref));
     this.view?.destroy();
     this.view = this.createEditor(d.pm_doc);
     this.baseline = this.view.state.doc;
@@ -234,11 +347,17 @@ export class DocumentController {
 
   // ---------------------------------------------------------------- 刷新
 
-  /** 派生 UI：大纲/字数/标题/命令态。IME 组合期间只刷状态条。 */
+  /** 派生 UI：大纲/字数/标题/命令态。IME 组合期间只刷状态条。
+   *  字数统计为 O(doc) 且对连续输入无时效价值：延迟 200ms 归并，
+   *  每次新编辑取消上一笔待算（长文档"取消旧布局任务"的最小实现）。 */
   refreshDerivedUI(): void {
     if (!this.composing && this.view) {
       this.hooks.onOutline(collectHeadings(this.view.state.doc));
-      this.hooks.onStats(countChars(this.view.state.doc));
+      const doc = this.view.state.doc;
+      if (this.statsTimer) clearTimeout(this.statsTimer);
+      this.statsTimer = setTimeout(() => {
+        if (this.view?.state.doc === doc) this.hooks.onStats(countChars(doc));
+      }, STATS_DEBOUNCE_MS);
     }
     this.hooks.onStateChange();
   }
@@ -457,6 +576,61 @@ export class DocumentController {
     }
   }
 
+  // ---------------------------------------------------------------- 预览
+
+  /** 印刷预览（E4）：当前 PM 快照 + theme 发服务端渲染，
+   *  返回 Paged.js 增强 HTML 与快照指纹（不出版、不提交）。 */
+  async requestPreview(): Promise<PreviewResult | null> {
+    const view = this.view;
+    if (!view) return null;
+    const s = this.store.state;
+    const epoch = s.epoch;
+    const body = {
+      pm_doc: view.state.doc.toJSON(),
+      theme: this.pageTheme,
+    };
+    this.hooks.onMessage("预览生成中…", true);
+    try {
+      const result = await this.gateway.renderPreview(s.sessionId, body);
+      if (epoch !== this.store.currentEpoch()) return null;
+      return result;
+    } catch (e) {
+      this.hooks.onMessage(`预览失败: ${errText(e)}`, false);
+      return null;
+    }
+  }
+
+  // ---------------------------------------------------------------- 修订
+
+  /** 还原到某修订快照（E5）。未保存改动先确认丢弃；
+   *  修订未带主题快照时如实提示"仅正文历史"（主题继承最近状态）。 */
+  async checkoutRevision(revId: string): Promise<void> {
+    if (!this.view) return;
+    const s = this.store.state;
+    if (!(await this.confirmDiscardIfDirty())) return;
+    const epoch = s.epoch;
+    const sessionId = s.sessionId;
+    this.hooks.onMessage(`还原修订 ${revId}…`, true);
+    try {
+      const doc = await this.gateway.checkoutRevision(sessionId, {
+        revision: revId,
+        expected_fingerprint: s.fingerprint ?? undefined,
+      });
+      if (epoch !== this.store.currentEpoch()) return;
+      this.mount({ sessionId, doc });
+      this.hooks.onMessage(
+        doc.theme_restored === false
+          ? `已还原修订 ${revId}（该修订无主题快照——仅正文历史，主题继承最近状态）`
+          : `已还原修订 ${revId}`,
+        true,
+      );
+    } catch (e) {
+      if (epoch !== this.store.currentEpoch()) return;
+      this.hooks.onMessage(`还原失败: ${errText(e)}`, false);
+    }
+    this.hooks.onStateChange();
+  }
+
   // ---------------------------------------------------------------- 任务
 
   /** 导出/出版固定为“先保存当前快照，再对该版本跑任务”。 */
@@ -546,6 +720,13 @@ export class DocumentController {
     }
     const loss = snapshot.result?.report?.summary?.loss;
     const lossText = loss ? ` · 损失 ${Object.values(loss).reduce((a, b) => a + b, 0)} 项` : "";
+    // E5：输出修订 + DOCX 能力矩阵摘要（支持/降级/保留计数）。
+    const outRev = snapshot.result?.report?.target?.revision;
+    const revText = outRev ? ` · 输出修订 ${outRev}` : "";
+    const cap = snapshot.result?.report?.capabilities?.counts;
+    const capText = cap
+      ? ` · 能力矩阵 支持${cap["supported"] ?? 0}/降级${cap["degraded"] ?? 0}/保留${cap["preserved"] ?? 0}`
+      : "";
     const labels: Record<string, string> = {
       queued: "排队中",
       running: "运行中",
@@ -556,7 +737,7 @@ export class DocumentController {
       failed: "失败",
     };
     this.hooks.onMessage(
-      `任务 #${snapshot.id} ${labels[snapshot.phase] ?? snapshot.phase} ${snapshot.progress}%${lossText}`,
+      `任务 #${snapshot.id} ${labels[snapshot.phase] ?? snapshot.phase} ${snapshot.progress}%${lossText}${revText}${capText}`,
       snapshot.phase !== "failed",
     );
     // 导入完成后重新打开产物（epoch 守卫由 openPath 自己再做一次）
@@ -658,6 +839,21 @@ function countChars(doc: PMNode): number {
     return true;
   });
   return n;
+}
+
+/** File → base64（不含 data: 前缀）；stageAsset 入参。 */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const res = r.result;
+      if (typeof res !== "string") return reject(new Error("读取失败"));
+      const comma = res.indexOf(",");
+      resolve(comma >= 0 ? res.slice(comma + 1) : res);
+    };
+    r.onerror = () => reject(new Error("读取文件失败"));
+    r.readAsDataURL(file);
+  });
 }
 
 function makeEditorId(prefix: "blk"): string {

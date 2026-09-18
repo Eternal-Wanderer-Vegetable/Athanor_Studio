@@ -78,6 +78,13 @@ jobs:
         working-directory: engine
         run: cargo test -p azodoc-model --test golden_schema
 
+  # E7 覆盖说明（无独立 job 的理由）：
+  # - asset integrity：由 `test` job 的 cargo test --workspace 覆盖
+  #   （aludel tests：资产暂存/MIME/字节上限/会话清理/离线重开）。
+  # - preview snapshot：同上（aludel e2e + athanor-cli 出版快照哈希用例）。
+  # - 浏览器交互 e2e 由 `editor` job 覆盖；真实桌面冒烟为手动 job
+  #   windows-smoke（workflow_dispatch，见下方）。
+
   test:
     name: ci (${{ matrix.os }})
     # Bound stalled runs while allowing a cold Tauri dependency build.
@@ -140,3 +147,24 @@ jobs:
         timeout-minutes: 10
         working-directory: engine
         run: cargo test --workspace
+
+  windows-smoke:
+    # E6 桌面验收：真实 Tauri shell 冒烟（WebView2 → 主窗口 → 干净退出）。
+    # 手动触发：桌面冒烟昂贵且需要真实窗口环境，不随每次 push 跑。
+    name: windows desktop smoke (manual)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: engine/crates/aludel/editor/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine -> target
+      - name: Desktop smoke (WebView2 → window → clean exit)
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows-smoke.ps1 -KeepSeconds 15

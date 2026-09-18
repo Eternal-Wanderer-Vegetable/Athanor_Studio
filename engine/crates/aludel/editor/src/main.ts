@@ -21,11 +21,26 @@ import { toggleMark, wrapIn, setBlockType } from "prosemirror-commands";
 import { wrapInList, liftListItem } from "prosemirror-schema-list";
 import { undo, redo } from "prosemirror-history";
 import "prosemirror-view/style/prosemirror.css";
+import "prosemirror-tables/style/tables.css";
 import { schema } from "./schema";
 import { DocumentController, errText } from "./app/document-controller";
 import { CommandRegistry, type CommandContext } from "./app/command-registry";
 import { findAll, selectMatch, replaceCurrent, replaceAll } from "./app/find";
-import { addTableRow, deleteTableRow, addTableColumn, deleteTableColumn, toggleHeaderRow, mergeTableCells, splitTableCell } from "./app/table-commands";
+import { gotoFootnote } from "./app/footnotes";
+import { PreviewSurface } from "./app/preview";
+import {
+  addTableRow,
+  addTableRowBefore,
+  deleteTableRow,
+  addTableColumn,
+  addTableColumnBefore,
+  deleteTableColumn,
+  deleteWholeTable,
+  fixTable,
+  toggleHeaderRow,
+  mergeTableCells,
+  splitTableCell,
+} from "./app/table-commands";
 import {
   setParagraphFormat,
   setCharacterFormat,
@@ -39,6 +54,7 @@ import { HttpGateway } from "./platform/http";
 import { $, renderOutline, renderSidebar, renderStatusBar, setMsg } from "./ui/panels";
 import { askText } from "./ui/dialogs";
 import { askPageSettings } from "./ui/page-settings";
+import { flag } from "./flags";
 
 const tauriMode = "__TAURI_INTERNALS__" in window;
 const gateway = tauriMode ? new TauriGateway() : new HttpGateway();
@@ -48,7 +64,7 @@ let zoom = 1;
 
 const ctl = new DocumentController($("editor"), gateway, {
   onStateChange: refreshUI,
-  onDocMeta: renderSidebar,
+  onDocMeta: (d) => renderSidebar(d, (rev) => void ctl.checkoutRevision(rev)),
   onMessage: setMsg,
   onOutline: (headings) =>
     renderOutline(headings, (pos) => {
@@ -224,18 +240,10 @@ reg("insert.image", "图片", () => {
   input.accept = "image/*";
   input.onchange = () => {
     const file = input.files?.[0];
-    if (!file || file.size > 10 * 1024 * 1024) {
-      if (file) setMsg("图片过大（上限 10 MB）。", false);
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result !== "string" || ctl.view !== v) return;
-      const alt = window.prompt("替代文字（可选）：", file.name) ?? file.name;
-      v.dispatch(v.state.tr.replaceSelectionWith(schema.nodes.image.create({ id: newId("blk"), asset: reader.result, alt })));
-      v.focus();
-    };
-    reader.readAsDataURL(file);
+    if (!file) return;
+    const alt = window.prompt("替代文字（可选）：", file.name) ?? file.name;
+    // 与粘贴/拖入共用服务端暂存入口（写 asset:// 引用）
+    void ctl.insertImageFile(file, alt).then(() => v.focus());
   };
   input.click();
 });
@@ -243,13 +251,36 @@ reg("insert.rule", "分隔线", () => {
   const v = ctl.view;
   if (v) v.dispatch(v.state.tr.replaceSelectionWith(schema.nodes.horizontal_rule.create()));
 });
+// 手动分页（E4）：插入 page_break 节点并补一段供光标落点（若文档末尾无后续块）。
+reg("insert.pageBreak", "分页符", () => {
+  const v = ctl.view;
+  if (!v) return;
+  const pb = schema.nodes.page_break.create({ id: newId("blk") });
+  const tr = v.state.tr.replaceSelectionWith(pb);
+  const after = tr.mapping.map(tr.selection.from);
+  const $after = tr.doc.resolve(after);
+  if ($after.nodeAfter === null || $after.nodeAfter.type.name === "page_break") {
+    tr.insert(after, schema.nodes.paragraph.create({ id: newId("blk") }));
+    tr.setSelection(TextSelection.create(tr.doc, after + 1));
+  }
+  v.dispatch(tr.scrollIntoView());
+  v.focus();
+});
+reg("view.preview", "打印预览", () => void openPreview());
+reg("table.rowAddBefore", "在上方增加行", () => pmRun(addTableRowBefore as never));
 reg("table.rowAdd", "增加表格行", () => pmRun(addTableRow as never));
 reg("table.rowDelete", "删除表格行", () => pmRun(deleteTableRow as never));
+reg("table.colAddBefore", "在左侧增加列", () => pmRun(addTableColumnBefore as never));
 reg("table.colAdd", "增加表格列", () => pmRun(addTableColumn as never));
 reg("table.colDelete", "删除表格列", () => pmRun(deleteTableColumn as never));
+reg("table.delete", "删除整个表格", () => pmRun(deleteWholeTable as never));
 reg("table.header", "切换表头", () => pmRun(toggleHeaderRow as never));
-reg("table.merge", "合并右侧单元格", () => pmRun(mergeTableCells as never));
+reg("table.merge", "合并单元格", () => pmRun(mergeTableCells as never));
 reg("table.split", "拆分单元格", () => pmRun(splitTableCell as never));
+reg("table.fix", "修复表格结构", () => pmRun(fixTable as never));
+// 粘贴模式（E3）：Ctrl+V 保留格式 / Ctrl+Alt+V 匹配目标 / Ctrl+Shift+V 纯文本。
+// 模式判定在 controller 的 keydown/paste handler（ClipboardEvent 无修饰键）。
+reg("footnote.goto", "跳转脚注", () => pmRun(gotoFootnote as never));
 reg("insert.math", "数学块", () => {
   const v = ctl.view;
   if (!v) return;
@@ -288,6 +319,37 @@ reg("view.zoomIn", "放大", () => setZoom(zoom + 0.1));
 reg("view.zoomOut", "缩小", () => setZoom(zoom - 0.1));
 reg("view.zoomReset", "100%", () => setZoom(1));
 
+const previewSurface = new PreviewSurface();
+
+/** 打印预览：当前快照渲染 → 浮层分页 → 页数/快照指纹（不出版）。 */
+async function openPreview(): Promise<void> {
+  if (!flag("printPreviewV1")) {
+    setMsg("打印预览功能已关闭。", true);
+    return;
+  }
+  const result = await ctl.requestPreview();
+  if (!result) return;
+  // 测试可注入短超时（分页回退路径）
+  const override = (window as unknown as { __previewTimeoutMs?: number }).__previewTimeoutMs;
+  if (typeof override === "number") {
+    const surface = new PreviewSurface(override);
+    await surface.open(result);
+    return;
+  }
+  const outcome = await previewSurface.open(result);
+  const breaks = outcome.layout?.page_breaks.length ?? 0;
+  if (outcome.fallback) {
+    setMsg("预览已打开（未分页回退）——点“打印…”走系统打印。", true);
+  } else {
+    setMsg(
+      `预览已打开：${outcome.page_count ?? "?"} 页` +
+        (breaks > 0 ? `（含 ${breaks} 处手动分页）` : "") +
+        " ——点“打印…”走系统打印。",
+      true,
+    );
+  }
+}
+
 function markActive(name: string): boolean {
   const v = ctl.view;
   if (!v) return false;
@@ -318,7 +380,12 @@ function refreshUI(): void {
     const el = document.querySelector<HTMLElement>(`[data-cmd="${cmd.id}"]`);
     if (el instanceof HTMLButtonElement) {
       el.disabled = !cmd.enabled(c);
-      if (cmd.active) el.classList.toggle("active", cmd.active());
+      if (cmd.active) {
+        const on = cmd.active();
+        el.classList.toggle("active", on);
+        // 切换态按钮的 a11y 语义（E6）：aria-pressed 与视觉态同步
+        el.setAttribute("aria-pressed", on ? "true" : "false");
+      }
     }
   }
   const s = ctl.store.state;
@@ -390,6 +457,7 @@ function onKeydown(e: KeyboardEvent): void {
     b: "format.strong",
     i: "format.em",
     u: "format.underline",
+    p: "view.preview",
   };
   const id = map[k];
   if (!id) return;
@@ -426,6 +494,7 @@ async function boot(): Promise<void> {
     ["tb-math", "insert.math"],
     ["tb-footnote", "insert.footnote"],
     ["tb-rule", "insert.rule"],
+    ["tb-page-break", "insert.pageBreak"],
     ["tb-strong", "format.strong"],
     ["tb-em", "format.em"],
     ["tb-underline", "format.underline"],
@@ -442,6 +511,7 @@ async function boot(): Promise<void> {
     ["m-export-docx", "job.exportDocx"],
     ["m-publish", "job.publish"],
     ["m-page-settings", "layout.pageSettings"],
+    ["m-preview", "view.preview"],
     ["cancel-job", "job.cancel"],
     ["sb-zoom-in", "view.zoomIn"],
     ["sb-zoom-out", "view.zoomOut"],

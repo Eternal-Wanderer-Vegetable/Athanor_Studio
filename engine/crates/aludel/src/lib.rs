@@ -20,6 +20,7 @@
 //! `App::verify`。
 
 pub mod api;
+pub mod assets;
 pub mod doc_store;
 pub mod http;
 pub mod session;

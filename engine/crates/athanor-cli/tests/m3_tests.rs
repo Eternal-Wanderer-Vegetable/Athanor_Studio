@@ -291,3 +291,89 @@ fn history_and_checkout_missing_revision_errors() {
     );
     std::fs::remove_dir_all(&dir).ok();
 }
+
+// ---------------------------------------------------------------- E5：表现层修订快照（spec §5.3）
+
+/// commit 落主题快照；checkout 还原主题；旧修订无快照 = 仅正文历史。
+#[test]
+fn theme_snapshot_commit_and_checkout_restore() {
+    let dir = tmpdir("theme-snap");
+    let doc = dir.join("d.azodoc");
+    assert_eq!(
+        athanor_cli::cmd_import(
+            &corpus("markdown/basic.md"),
+            &doc,
+            None,
+            "zh-CN",
+            None,
+            false
+        ),
+        0
+    );
+    // importer 修订无主题层 → 无快照（仅正文历史）
+    let mut c = read_container(&doc);
+    let rev_no_theme = c.history().unwrap()[0].id.clone();
+    assert!(c.history().unwrap()[0].theme_sha256.is_none());
+
+    // 注入 theme 层（模拟编辑器保存路径）
+    let theme_v1 = serde_json::json!({"schema_version":"1.0","theme":"default","pageSize":"A4"});
+    let mut tb = serde_json::to_vec_pretty(&theme_v1).unwrap();
+    tb.push(b'\n');
+    c.set_entry("presentation/theme.json", tb).unwrap();
+    {
+        let mut manifest = c.manifest_value().clone();
+        manifest["layers"]["presentation"] = serde_json::json!({
+            "path": "presentation/theme.json",
+            "sha256": sha(&c.read_entry("presentation/theme.json").unwrap()),
+        });
+        c.set_manifest(manifest).unwrap();
+    }
+    std::fs::write(&doc, c.write().unwrap()).unwrap();
+    drop(c);
+
+    // 提交 v1：链条目必须携带 theme_path/theme_sha256
+    assert_eq!(cmd_commit(&doc, "human:u", "主题 A4"), 0);
+    let mut c = read_container(&doc);
+    let h = c.history().unwrap();
+    let rev_v1 = h[1].id.clone();
+    assert!(h[1].theme_sha256.is_some(), "v1 应有主题快照");
+    assert!(c.has_entry(&format!("revisions/{rev_v1}/theme.json")));
+
+    // 改主题为 Letter + 提交 v2
+    let theme_v2 =
+        serde_json::json!({"schema_version":"1.0","theme":"default","pageSize":"Letter"});
+    let mut tb2 = serde_json::to_vec_pretty(&theme_v2).unwrap();
+    tb2.push(b'\n');
+    c.set_entry("presentation/theme.json", tb2).unwrap();
+    std::fs::write(&doc, c.write().unwrap()).unwrap();
+    drop(c);
+    assert_eq!(cmd_commit(&doc, "human:u", "主题 Letter"), 0);
+
+    // checkout 回 v1：主题应还原为 A4
+    assert_eq!(cmd_checkout(&doc, &rev_v1, None), 0);
+    let mut c = read_container(&doc);
+    let theme_now: serde_json::Value =
+        serde_json::from_slice(&c.read_entry("presentation/theme.json").unwrap()).unwrap();
+    assert_eq!(theme_now["pageSize"], "A4");
+    // manifest presentation 层 sha 应指向还原后的主题
+    let theme_sha_now = sha(&c.read_entry("presentation/theme.json").unwrap());
+    assert_eq!(
+        c.manifest_value()["layers"]["presentation"]["sha256"].as_str(),
+        Some(theme_sha_now.as_str())
+    );
+    assert_eq!(
+        athanor_cli::verify_cmd::run(&doc),
+        0,
+        "还原后 verify 应通过"
+    );
+    drop(c);
+
+    // checkout 到无快照的 importer 修订：仅正文历史——主题不被回滚、不伪造
+    assert_eq!(cmd_checkout(&doc, &rev_no_theme, None), 0);
+    let mut c = read_container(&doc);
+    let theme_kept: serde_json::Value =
+        serde_json::from_slice(&c.read_entry("presentation/theme.json").unwrap()).unwrap();
+    assert_eq!(theme_kept["pageSize"], "A4", "仅正文历史不应改动主题");
+    assert_eq!(athanor_cli::verify_cmd::run(&doc), 0);
+    std::fs::remove_dir_all(&dir).ok();
+}

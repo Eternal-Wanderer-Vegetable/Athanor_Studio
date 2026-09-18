@@ -672,7 +672,7 @@ pub fn plain_text_of_block(block: &Value) -> String {
             out.join("\n")
         }
         "embed" => String::new(),
-        "horizontal_rule" => String::new(),
+        "horizontal_rule" | "page_break" => String::new(),
         "unknown" => String::new(),
         _ => String::new(),
     }

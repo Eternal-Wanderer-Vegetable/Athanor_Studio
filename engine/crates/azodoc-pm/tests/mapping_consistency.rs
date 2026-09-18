@@ -166,7 +166,7 @@ fn untagged_structs_match_schemars() {
     let col = find_struct_def(&schema, "TableColumn").expect("schemars $defs 找不到 TableColumn");
     assert_eq!(
         prop_names(col),
-        vec!["id", "name"],
+        vec!["id", "name", "width"],
         "TableColumn 形状变化时须同步 table.columns attr 约定"
     );
     let table = NODES
@@ -185,12 +185,19 @@ fn content_expressions_reference_defined_names() {
     let mut group_members: Vec<&str> = Vec::new();
     for d in NODES {
         if let Some(expr) = d.content {
-            let token = expr.trim_end_matches(['*', '+']);
-            assert!(
-                node_names.contains(&token) || token == "block" || token == "inline",
-                "`{}` 的 content 表达式引用了未定义的 `{token}`",
-                d.pm_name
-            );
+            // 抽取内容表达式中的所有标识符（支持 "a*"、"(a | b)*" 形态）
+            let inner = expr
+                .trim_end_matches(['*', '+'])
+                .trim_start_matches('(')
+                .trim_end_matches(')');
+            for token in inner.split('|') {
+                let token = token.trim();
+                assert!(
+                    node_names.contains(&token) || token == "block" || token == "inline",
+                    "`{}` 的 content 表达式引用了未定义的 `{token}`",
+                    d.pm_name
+                );
+            }
         }
         if !d.group.is_empty() {
             group_members.push(d.group);

@@ -46,6 +46,7 @@
         { "$ref": "#/$defs/figure" },
         { "$ref": "#/$defs/image" },
         { "$ref": "#/$defs/horizontal_rule" },
+        { "$ref": "#/$defs/page_break" },
         { "$ref": "#/$defs/math_block" },
         { "$ref": "#/$defs/callout" },
         { "$ref": "#/$defs/embed" },
@@ -148,7 +149,8 @@
             "additionalProperties": true,
             "properties": {
               "id": { "$ref": "#/$defs/col_id" },
-              "name": { "type": "string" }
+              "name": { "type": "string" },
+              "width": { "type": "integer", "minimum": 0 }
             }
           }
         },
@@ -171,6 +173,7 @@
                     "column": { "type": "integer", "minimum": 0 },
                     "colSpan": { "type": "integer", "minimum": 1 },
                     "rowSpan": { "type": "integer", "minimum": 1 },
+                    "role": { "enum": ["header", "body"] },
                     "children": { "$ref": "#/$defs/blocks" }
                   }
                 }
@@ -210,6 +213,15 @@
       "properties": {
         "id": { "$ref": "#/$defs/blk_id" },
         "type": { "const": "horizontal_rule" }
+      }
+    },
+    "page_break": {
+      "type": "object",
+      "required": ["id", "type"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "$ref": "#/$defs/blk_id" },
+        "type": { "const": "page_break" }
       }
     },
     "math_block": {

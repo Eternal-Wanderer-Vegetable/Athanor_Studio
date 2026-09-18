@@ -17,12 +17,15 @@
 //! 桌面专有能力（对话框、草稿、最近文件、任务）显式禁用。
 
 import type {
+  DocResponse,
   DocumentGateway,
   JobRequest,
   JobSnapshot,
   OpenResult,
+  PreviewResult,
   RecoveryDraft,
   SaveResult,
+  StagedAssetRef,
 } from "./gateway";
 
 async function post(path: string, body: unknown): Promise<{ status: number; data: Record<string, unknown> }> {
@@ -65,6 +68,28 @@ export class HttpGateway implements DocumentGateway {
     return data as unknown as SaveResult;
   }
 
+  async stageAsset(
+    _sessionId: string,
+    file: { filename: string; mime: string; dataBase64: string },
+  ): Promise<StagedAssetRef> {
+    const { status, data } = await post("/api/asset/stage", {
+      filename: file.filename,
+      mime: file.mime,
+      data: file.dataBase64,
+    });
+    if (status !== 200) throw new Error(String(data["error"] ?? `HTTP ${status}`));
+    return { id: String(data["id"]), url: String(data["url"]) };
+  }
+
+  assetUrl(_sessionId: string, ref: string): string {
+    // asset://<id>[/<name>] → 服务端资产端点；external 条目由服务端 302。
+    if (ref.startsWith("asset://")) {
+      const id = ref.slice("asset://".length).split("/")[0];
+      return `/api/asset/${encodeURIComponent(id)}`;
+    }
+    return ref;
+  }
+
   async saveDocumentAs(): Promise<SaveResult> {
     unsupported("另存为");
   }
@@ -75,6 +100,24 @@ export class HttpGateway implements DocumentGateway {
 
   async verifyDocument(): Promise<Record<string, unknown>> {
     return (await post("/api/verify", {})).data;
+  }
+
+  async renderPreview(
+    _sessionId: string,
+    body: Record<string, unknown>,
+  ): Promise<PreviewResult> {
+    const { status, data } = await post("/api/preview", body);
+    if (status !== 200) throw new Error(String(data["error"] ?? `HTTP ${status}`));
+    return data as unknown as PreviewResult;
+  }
+
+  async checkoutRevision(
+    _sessionId: string,
+    body: Record<string, unknown>,
+  ): Promise<DocResponse> {
+    const { status, data } = await post("/api/checkout", body);
+    if (status !== 200) throw new Error(String(data["error"] ?? `HTTP ${status}`));
+    return data as unknown as DocResponse;
   }
 
   async pickOpen(): Promise<string | null> {

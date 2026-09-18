@@ -123,6 +123,8 @@ export const schemaSpec = {
     "table": {
       "group": "block",
       "content": "table_row*",
+      "tableRole": "table",
+      "isolating": true,
       "attrs": {
         "id": {
           "default": ""
@@ -139,7 +141,9 @@ export const schemaSpec = {
       }
     },
     "table_row": {
-      "content": "table_cell*",
+      "content": "(table_cell | table_header)*",
+      "tableRole": "row",
+      "isolating": true,
       "attrs": {
         "id": {
           "default": ""
@@ -151,6 +155,8 @@ export const schemaSpec = {
     },
     "table_cell": {
       "content": "block*",
+      "tableRole": "cell",
+      "isolating": true,
       "attrs": {
         "id": {
           "default": ""
@@ -158,10 +164,44 @@ export const schemaSpec = {
         "column": {
           "default": 0
         },
-        "colSpan": {
+        "colspan": {
+          "default": 1
+        },
+        "rowspan": {
+          "default": 1
+        },
+        "role": {
           "default": null
         },
-        "rowSpan": {
+        "colwidth": {
+          "default": null
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "table_header": {
+      "content": "block*",
+      "tableRole": "header_cell",
+      "isolating": true,
+      "attrs": {
+        "id": {
+          "default": ""
+        },
+        "column": {
+          "default": 0
+        },
+        "colspan": {
+          "default": 1
+        },
+        "rowspan": {
+          "default": 1
+        },
+        "role": {
+          "default": null
+        },
+        "colwidth": {
           "default": null
         },
         "extra": {
@@ -207,6 +247,17 @@ export const schemaSpec = {
       }
     },
     "horizontal_rule": {
+      "group": "block",
+      "attrs": {
+        "id": {
+          "default": ""
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
+    "page_break": {
       "group": "block",
       "attrs": {
         "id": {

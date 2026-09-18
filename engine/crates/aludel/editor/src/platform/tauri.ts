@@ -18,12 +18,15 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { open as dialogOpen, save as dialogSave, confirm as dialogConfirm } from "@tauri-apps/plugin-dialog";
 import type {
+  DocResponse,
   DocumentGateway,
   JobRequest,
   JobSnapshot,
   OpenResult,
+  PreviewResult,
   RecoveryDraft,
   SaveResult,
+  StagedAssetRef,
 } from "./gateway";
 
 const DOC_FILTER = { name: "Azodoc 文档", extensions: ["azodoc"] };
@@ -61,12 +64,48 @@ export class TauriGateway implements DocumentGateway {
     return invoke<SaveResult>("save_document_as", { sessionId, target, overwrite, body });
   }
 
+  async stageAsset(
+    sessionId: string,
+    file: { filename: string; mime: string; dataBase64: string },
+  ): Promise<StagedAssetRef> {
+    return invoke<StagedAssetRef>("stage_asset", {
+      sessionId,
+      filename: file.filename,
+      mime: file.mime,
+      data: file.dataBase64,
+    });
+  }
+
+  assetUrl(sessionId: string, ref: string): string {
+    // azodoc-asset://localhost/<session>/<id> → lib.rs 自定义协议处理器；
+    // session id 可能含路径字符，必须 percent-encode。
+    if (ref.startsWith("asset://")) {
+      const id = ref.slice("asset://".length).split("/")[0];
+      return `azodoc-asset://localhost/${encodeURIComponent(sessionId)}/${encodeURIComponent(id)}`;
+    }
+    return ref;
+  }
+
   async closeDocument(sessionId: string): Promise<void> {
     await invoke("close_document", { sessionId });
   }
 
   async verifyDocument(sessionId: string): Promise<Record<string, unknown>> {
     return invoke<Record<string, unknown>>("verify_document", { sessionId });
+  }
+
+  async renderPreview(
+    sessionId: string,
+    body: Record<string, unknown>,
+  ): Promise<PreviewResult> {
+    return invoke<PreviewResult>("preview_document", { sessionId, body });
+  }
+
+  async checkoutRevision(
+    sessionId: string,
+    body: Record<string, unknown>,
+  ): Promise<DocResponse> {
+    return invoke<DocResponse>("checkout_revision", { sessionId, body });
   }
 
   async pickOpen(): Promise<string | null> {

@@ -46,6 +46,7 @@ pub const KNOWN_NODE_TYPES: &[&str] = &[
     "figure",
     "image",
     "horizontal_rule",
+    "page_break",
     "math_block",
     "callout",
     "embed",
@@ -157,6 +158,12 @@ pub enum Node {
         #[serde(flatten)]
         extra: ExtraMap,
     },
+    #[serde(rename = "page_break")]
+    PageBreak {
+        id: String,
+        #[serde(flatten)]
+        extra: ExtraMap,
+    },
     #[serde(rename = "math_block")]
     MathBlock {
         id: String,
@@ -216,6 +223,9 @@ pub struct TableColumn {
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// 相对宽度单位（仅比例有意义，非绝对单位；azodoc-model.md §6.5）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<i64>,
     #[serde(flatten)]
     pub extra: ExtraMap,
 }
@@ -236,6 +246,9 @@ pub struct TableCell {
     pub col_span: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "rowSpan")]
     pub row_span: Option<i64>,
+    /// 表头角色（"header" | "body"，默认 body；azodoc-model.md §6.5）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
     pub children: Vec<Node>,
     #[serde(flatten)]
     pub extra: ExtraMap,

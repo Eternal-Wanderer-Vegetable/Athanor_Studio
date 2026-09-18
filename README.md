@@ -179,6 +179,7 @@ cd engine && cargo test    # 169 tests; DOCX/PDF e2e auto-skip if tools are abse
 - **[Design draft (Chinese)](design_docs/SDOC%20Document%20Model%20v0.1%20—%20草案.md)** — the original concept draft
 - **[Implementation plan (Chinese)](design_docs/Azodoc%20v0.1%20—%20落地方案.md)** — the plan this repo was built from, with milestone acceptance records
 - **[M6 editor prototype plan (Chinese)](design_docs/M6%20—%20Aludel%20编辑器原型计划.md)** — A1's RFC, the Prima ↔ ProseMirror mapping table, and staged implementation records
+- **[Editor guide (Chinese)](docs/editor.md)** — Aludel feature inventory, feature flags, migration & compatibility notes, DOCX capability matrix, failure recovery, and debug-bundle collection
 - **[Future work / 可选项](design_docs/Future%20Work%20—%20可选项与后续计划.md)** — archived roadmap options (native OOXML, …); A1 (editor), A2 (AI pipeline) and B1 (Paged.js publishing) have shipped
 - **[spec/](spec/)** — normative container/package/model/loss specifications
 

@@ -116,11 +116,11 @@ ULID 采用 Crockford Base32 字母表（`0-9` + `A-Z` 去 `I L O U`），26 位
 ```json
 {
   "id": "blk_…", "type": "table",
-  "columns": [ { "id": "col_…", "name": "块类型" }, … ],
+  "columns": [ { "id": "col_…", "name": "块类型", "width": 2 }, … ],
   "header_row": true,
   "rows": [
     { "id": "row_…", "cells": [
-        { "id": "cel_…", "column": 0, "colSpan": 1, "rowSpan": 1, "children": [ … ] }, …
+        { "id": "cel_…", "column": 0, "colSpan": 1, "rowSpan": 1, "role": "header", "children": [ … ] }, …
     ] }
   ]
 }
@@ -128,9 +128,13 @@ ULID 采用 Crockford Base32 字母表（`0-9` + `A-Z` 去 `I L O U`），26 位
 
 - `column` 是该单元格**起始列下标（0 起）**——配合 colSpan/rowSpan 可无歧义重建网格；
 - `colSpan`/`rowSpan` ≥ 1，默认 1；
+- `columns[].width`：可选非负整数，**相对宽度单位**（仅比例有意义，非像素/磅等绝对单位）；它是表格结构属性的有限例外（见 §11），缺失时按等宽。删除列时 MUST 同步移除对应 `columns` 项；编辑器拖拽列宽写回本字段。
+- `cells[].role`：可选 `"header" | "body"`，默认 `"body"`；与 `header_row` 正交——`header_row: true` 声明首行是表头，`role: "header"` 声明任意单元格的表头角色（如首列作表头）。
 - `header_row: true` 表示首行是表头；
 - 单元格 children 为 Block[]（允许段落、列表甚至嵌套表格）；
 - 网格重建算法（normative）：建立 R×C 矩阵，按 rows 顺序、每行按 `column` 升序放置，遇占位跳过——与 HTML 表格布局规则一致。
+
+**不规则旧表（冻结规则）**：网格重建中单元格相互重叠、`column`/`colSpan`/`rowSpan` 越界或与 `columns` 数量不一致的表称为**不规则表**。读取器 MUST 原样读入并展示为可诊断状态（工具给出诊断提示），MUST NOT 静默重写其结构；任何修复（拆分、重排、补列）只能在用户显式操作下发生，且 MUST 可撤销。verify 对不规则结构输出警告级诊断（`table.irregular`），不判错误。
 
 ### 6.6 图
 
@@ -141,6 +145,8 @@ ULID 采用 Crockford Base32 字母表（`0-9` + `A-Z` 去 `I L O U`），26 位
 ### 6.7 分隔与数学
 
 **horizontal_rule** — 无附加字段
+
+**page_break** — 无附加字段（手动分页符；连续视图为渲染 hint，印刷/DOCX 导出为真实分页）
 
 **math_block** — `latex: string`（LaTeX 数学子集）
 
@@ -281,5 +287,7 @@ Prima 中 **MUST NOT 出现**以下概念；出现即 Schema 校验失败：
 - 字体、字号、颜色、行距、对齐、边距等视觉属性（属 presentation/theme）；
 - 页码、页面尺寸、绝对坐标（属 publication/layout）；
 - 任何「渲染器指令」类字段。
+
+有限例外：`table.columns[].width` 的相对宽度单位（§6.5）与 Block 的 `style` 软引用（§11 末段）——两者都是结构属性而非视觉属性，渲染器可安全忽略。
 
 Block MAY 携带 `style: ["<类名>"]` 引用 theme 中定义的样式类（软引用；theme 缺席时安全忽略——这满足草案 Principle 8「去掉高级特性仍有用」）。

@@ -133,6 +133,56 @@ fn data_uri_image_becomes_embedded_asset() {
 }
 
 #[test]
+fn page_break_marker_import_and_export() {
+    // 自家产物 <div class="page-break"> → page_break 块（E4 手动分页）。
+    let (out, _) = import("<p>前</p><div class=\"page-break\"></div><p>后</p>");
+    let s = serde_json::to_string(&out.content).unwrap();
+    assert!(
+        s.contains("\"page_break\""),
+        "div.page-break 应映射为 page_break"
+    );
+
+    // 导出：page_break → <div class="page-break">（印刷 CSS 分页点）。
+    let mut nid = 0u32;
+    let mut nid = move |_: &str| -> String {
+        nid += 1;
+        format!("blk_{nid:026}")
+    };
+    let mut idgen = |k: azodoc_model::id::IdKind| -> String {
+        let _ = k;
+        nid("blk")
+    };
+    let content = serde_json::json!({"schema_version": "1.0", "content": [
+        {"type": "paragraph", "id": idgen(azodoc_model::id::IdKind::Blk),
+         "content": [{"type": "text", "text": "a"}]},
+        {"type": "page_break", "id": idgen(azodoc_model::id::IdKind::Blk)},
+    ]});
+    let doc = azodoc_convert::ExportDoc {
+        content,
+        assets: vec![],
+        preserved: vec![],
+        title: None,
+        language: None,
+        document_id: None,
+    };
+    let mut log = azodoc_convert::LossLog::new();
+    let html = azodoc_html::export_html(&doc, &mut log);
+    assert!(
+        html.contains("<div class=\"page-break\""),
+        "导出应含分页标记"
+    );
+
+    // marked 变体：块带 data-block-id（LayoutIndex 用）。
+    let mut log2 = azodoc_convert::LossLog::new();
+    let marked = azodoc_html::export_html_marked(&doc, &mut log2);
+    assert!(
+        marked.contains("data-block-id="),
+        "marked 导出应带 data-block-id"
+    );
+    assert!(!html.contains("data-block-id"), "默认导出不得带标记");
+}
+
+#[test]
 fn sanitized_fragment_removes_active_content() {
     let (clean, removed) =
         azodoc_html::sanitize_fragment("<p onclick=\"x()\">好<script>bad()</script></p>");

@@ -32,7 +32,11 @@ export interface DocResponse {
     timestamp: string | null;
     is_current: boolean;
     is_head: boolean;
+    /** §5.3：该修订的表现层快照 sha256；缺失 = 仅正文历史。 */
+    theme_sha256?: string | null;
   }[];
+  /** checkout 响应附带：该修订是否还原了表现层主题。 */
+  theme_restored?: boolean;
   warnings: string[];
   loss_summary: {
     unknown_blocks: Record<string, unknown>[];
@@ -66,7 +70,15 @@ export interface JobSnapshot {
   phase: string;
   progress: number;
   session_id?: string | null;
-  result?: { output?: string; document?: string; report?: { summary?: { loss?: Record<string, number> } } };
+  result?: {
+    output?: string;
+    document?: string;
+    report?: {
+      target?: { revision?: string };
+      capabilities?: { matrix_version?: string; counts?: Record<string, number> };
+      summary?: { loss?: Record<string, number> };
+    };
+  };
   error?: { code: string; message: string };
 }
 
@@ -86,6 +98,28 @@ export interface RecoveryDraft {
   saved_at: string | null;
 }
 
+export interface PreviewResult {
+  /** Paged.js 增强后的印刷 HTML（polyfill 内嵌，可直接喂 iframe srcdoc）。 */
+  html: string;
+  /** 未增强版本：分页超时/失败时的未分页回退呈现。 */
+  print_html: string;
+  page_size: string;
+  snapshot: {
+    content_hash: string;
+    theme_hash: string;
+    layout_hash: string;
+    mode: string;
+    css_version: string;
+  };
+}
+
+export interface StagedAssetRef {
+  /** 服务端生成的 as_ id。 */
+  id: string;
+  /** 写入正文 asset 字段的引用：`asset://<id>/<filename>`。 */
+  url: string;
+}
+
 export interface DocumentGateway {
   readonly desktop: boolean;
 
@@ -94,6 +128,14 @@ export interface DocumentGateway {
   /** HTTP 模式直接返回当前文档（服务端单文档会话）。 */
   openInitial(): Promise<OpenResult>;
   saveDocument(sessionId: string, body: Record<string, unknown>): Promise<SaveResult>;
+  /** 暂存资产（dataBase64 为文件字节）；返回写入正文的 asset:// 引用。 */
+  stageAsset(
+    sessionId: string,
+    file: { filename: string; mime: string; dataBase64: string },
+  ): Promise<StagedAssetRef>;
+  /** `asset://<id>` → 本端可展示 URL（HTTP 端点 / Tauri 自定义协议）；
+   * 非 asset:// 引用原样返回。 */
+  assetUrl(sessionId: string, ref: string): string;
   saveDocumentAs(
     sessionId: string,
     target: string,
@@ -102,6 +144,10 @@ export interface DocumentGateway {
   ): Promise<SaveResult>;
   closeDocument(sessionId: string): Promise<void>;
   verifyDocument(sessionId: string): Promise<Record<string, unknown>>;
+  /** 印刷预览：对当前 PM 快照产出 Paged.js 增强 HTML + 快照指纹（不出版）。 */
+  renderPreview(sessionId: string, body: Record<string, unknown>): Promise<PreviewResult>;
+  /** 还原到某修订快照；返回重开的 DocResponse + theme_restored。 */
+  checkoutRevision(sessionId: string, body: Record<string, unknown>): Promise<DocResponse>;
 
   // ---- 文件对话框（HTTP 模式抛 unsupported）----
   pickOpen(): Promise<string | null>;

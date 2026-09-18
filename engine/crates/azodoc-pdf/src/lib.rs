@@ -27,7 +27,8 @@ mod cdp;
 pub mod paged;
 
 pub use paged::{
-    augment_print_html, print_html_to_pdf_paged, write_polyfill_assets, PagedRenderInfo, PAGED_CSS,
+    augment_print_html, augment_print_html_inline, print_html_to_pdf_paged, write_polyfill_assets,
+    PagedRenderInfo, PAGED_CSS,
 };
 
 use std::io::Write as IoWrite;

@@ -12,6 +12,7 @@
 | `html/lossy.html` | HTML 有损语料：script、onclick、javascript: URL、自定义元素、样式类、iframe、注释 |
 | `golden/markdown-basic.txt` | TXT 兜底导出黄金文件（`AZODOC_WRITE_GOLDEN=1 cargo test` 重新生成） |
 | `golden/html-basic.txt` | 同上（HTML 来源） |
+| `editor/` | E0 契约夹具（editor 增强路线图）：`asset-mixed`（内嵌+外链+孤儿）、`asset-external`、`legacy-data-uri.json`（旧 data URI，非容器）、`table-spans`（span/width/role/header_row）、`table-irregular`（重叠+越界，仅诊断）、`theme-history`（rev2 带 theme 快照，rev1 仅正文）、`layout-hints`（脚注+分页提示）、`pixel.png`（1×1 PNG 原件）。由 `cargo run -p athanor-cli --example fixtures` 确定性生成 |
 
 ## 恒等判定
 

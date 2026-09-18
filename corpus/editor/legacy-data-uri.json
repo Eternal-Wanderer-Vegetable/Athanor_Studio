@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "content": [
+    {
+      "id": "blk_01JGF0000000000000000000M1",
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "旧式 data URI 夹具（打开可显示，保存时迁移）"
+        }
+      ]
+    },
+    {
+      "id": "blk_01JGF0000000000000000000M2",
+      "type": "image",
+      "asset": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAANSURBVBhXY7Cp0DgBAAN1AaVCMuqGAAAAAElFTkSuQmCC",
+      "alt": "旧 data URI 图"
+    }
+  ]
+}

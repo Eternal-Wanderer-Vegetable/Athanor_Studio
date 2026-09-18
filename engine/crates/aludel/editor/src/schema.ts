@@ -83,10 +83,25 @@ function paraFormatFromDom(dom: HTMLElement): ParagraphFormat {
   return out;
 }
 
-/** Prima 资产引用（asset://<id>/<path>）→ 可展示 URL；非 http(s) 的返回 null，
- * 由 toDOM 渲染为占位框（真实资源解析属表现层/导出，编辑器内不假装能加载）。 */
+/** Prima 资产引用 → 可展示 URL；非已知可展示形态的返回 null，
+ * 由 toDOM 渲染为占位框（不假装能加载）。
+ * `asset://` 经注册的解析器映射到本端 URL（HTTP /api/asset 或
+ * Tauri azodoc-asset:// 协议）；未注册解析器时（测试/原型）占位。
+ * `data:`/`blob:`/`http(s)` 原样可显示——其中 data: 是 §4.2 的旧形态，
+ * 打开可显示、保存时由服务端迁移为 asset://。 */
+export type AssetResolver = (ref: string) => string | null;
+let assetResolver: AssetResolver | null = null;
+
+/** 注册会话级资产解析器（DocumentController 在挂接 gateway 后调用）。 */
+export function setAssetResolver(r: AssetResolver | null): void {
+  assetResolver = r;
+}
+
 function assetUrl(asset: unknown): string | null {
   const s = typeof asset === "string" ? asset : "";
+  if (s.startsWith("asset://")) {
+    return assetResolver ? assetResolver(s) : null;
+  }
   return /^(?:https?:\/\/|blob:|data:image\/)/.test(s) ? s : null;
 }
 
@@ -106,6 +121,24 @@ function captionText(caption: unknown): string {
 }
 
 // ---------------------------------------------------------------- toDOM
+
+/** 官方 setCellAttrs 等价物：colwidth → data-colwidth + style.width。 */
+function cellAttrs(node: PMNode): Record<string, unknown> {
+  const extra: Record<string, unknown> = {};
+  const colwidth = node.attrs.colwidth as number[] | null | undefined;
+  const widths = colwidth && colwidth.filter((w) => typeof w === "number");
+  if (widths && widths.length > 0) {
+    extra["data-colwidth"] = colwidth!.join(",");
+    if (colwidth!.length === 1 && widths.length === 1) {
+      extra.style = `width: ${widths[0]}px`;
+    }
+  }
+  return {
+    colspan: node.attrs.colspan ?? undefined,
+    rowspan: node.attrs.rowspan ?? undefined,
+    ...extra,
+  };
+}
 
 const nodeToDOM: Record<string, (node: PMNode) => AnySpec> = {
   section: () => ["div", { class: "az-section" }, 0],
@@ -136,16 +169,12 @@ const nodeToDOM: Record<string, (node: PMNode) => AnySpec> = {
     node.attrs.language ? { "data-language": node.attrs.language } : {},
     ["code", 0],
   ],
-  table: () => ["table", 0],
+  // 表格系：对齐 prosemirror-tables 官方 DOM 契约（tbody 包装、
+  // data-colwidth 列宽、th/td 角色），TableMap/列宽拖拽依赖此结构。
+  table: () => ["table", ["tbody", 0]],
   table_row: () => ["tr", 0],
-  table_cell: (node) => [
-    "td",
-    {
-      colspan: node.attrs.colSpan ?? undefined,
-      rowspan: node.attrs.rowSpan ?? undefined,
-    },
-    0,
-  ],
+  table_cell: (node) => ["td", cellAttrs(node), 0],
+  table_header: (node) => ["th", cellAttrs(node), 0],
   figure: (node) => {
     const src = assetUrl(node.attrs.asset);
     const img = src
@@ -162,6 +191,12 @@ const nodeToDOM: Record<string, (node: PMNode) => AnySpec> = {
       : ["span", { class: "az-asset-placeholder" }, `asset: ${node.attrs.asset}`];
   },
   horizontal_rule: () => ["hr"],
+  // 手动分页（E4）：编辑器里可见的分页标记；印刷/PDF 由 .page-break 规则分页。
+  page_break: () => [
+    "div",
+    { class: "az-page-break", title: "分页符：此处之后另起一页" },
+    ["hr"],
+  ],
   // 数学在编辑器内以 LaTeX 源码呈现（KaTeX 渲染属 Future Work B3）；双击可编辑
   math_block: (node) => [
     "div",
@@ -174,7 +209,14 @@ const nodeToDOM: Record<string, (node: PMNode) => AnySpec> = {
     0,
   ],
   embed: (node) => ["div", { class: "az-embed" }, `embed: ${node.attrs.asset}`],
-  footnote: () => ["aside", { class: "az-footnote" }, 0],
+  // 回跳符供 footnoteClick 定位：点击跳回第一个引用点。
+  // PM 的 0（内容洞）必须是所在元素的唯一子节点——↩ 与内容 div 作兄弟。
+  footnote: () => [
+    "aside",
+    { class: "az-footnote" },
+    ["span", { class: "az-footnote-back", title: "跳回引用" }, "↩"],
+    ["div", { class: "az-footnote-body" }, 0],
+  ],
   // unknown = R2/R3 通道：只读卡片，payload 不进 DOM，只显示损失元数据
   unknown_block: (node) => [
     "div",
@@ -237,6 +279,26 @@ const markToDOM: Record<string, (mark: PMNode) => AnySpec> = {
 // ---------------------------------------------------------------- parseDOM
 // 剪贴板粘贴的最小恢复面；无法建模的内容自然退化为纯文本（损失由保存侧报告）。
 
+/** 官方 getCellAttrs 等价物：td/th → colspan/rowspan/colwidth（小写 PM 名）。
+ *  显式转 number——PM 不强制 attr 类型，字符串会让 Prima 侧 as_i64 丢失跨度。 */
+function cellParseAttrs(dom: string | Node): Record<string, unknown> {
+  const el = dom as HTMLElement;
+  const int = (name: string): number | undefined => {
+    const v = el.getAttribute(name);
+    return v && /^\d+$/.test(v) ? Number(v) : undefined;
+  };
+  const widthAttr = el.getAttribute("data-colwidth");
+  const widths =
+    widthAttr && /^\d+(,\d+)*$/.test(widthAttr)
+      ? widthAttr.split(",").map(Number)
+      : [el.offsetWidth];
+  return {
+    colspan: int("colspan"),
+    rowspan: int("rowspan"),
+    colwidth: widths,
+  };
+}
+
 const nodeParseDOM: Record<string, AnySpec[]> = {
   section: [{ tag: "div[data-az-section]" }],
   paragraph: [
@@ -286,11 +348,66 @@ const nodeParseDOM: Record<string, AnySpec[]> = {
       },
     },
   ],
-  table: [{ tag: "table" }],
+  table: [
+    {
+      tag: "table",
+      getAttrs: (dom: string | Node) => {
+        // 粘贴的外部 HTML：首行全 th → header_row（本侧 td/th 已能无损
+        // 区分，这里只为外部表格补角色元数据）。
+        const firstRow = (dom as HTMLElement).querySelector("tr");
+        const cells = firstRow ? Array.from(firstRow.children) : [];
+        return cells.length > 0 && cells.every((c) => c.tagName === "TH")
+          ? { header_row: true }
+          : {};
+      },
+    },
+  ],
   table_row: [{ tag: "tr" }],
-  table_cell: [{ tag: "td" }, { tag: "th" }],
+  // th 走 table_header（下方 parseDOM 注册顺序保证优先级），td 走 table_cell。
+  // getCellAttrs：colspan/rowspan 原生属性 + data-colwidth/width 样式读回。
+  table_cell: [
+    {
+      tag: "td",
+      getAttrs: cellParseAttrs,
+    },
+  ],
+  table_header: [
+    {
+      tag: "th",
+      getAttrs: cellParseAttrs,
+    },
+  ],
   horizontal_rule: [{ tag: "hr" }],
+  page_break: [{ tag: "div.az-page-break" }, { tag: "div.page-break" }],
   hard_break: [{ tag: "br" }],
+  // E3 粘贴恢复面：编辑器自身 toDOM 产物 + 外部网页的最小集。
+  image: [
+    {
+      tag: "img[src]",
+      getAttrs: (dom: string | Node) => {
+        const el = dom as HTMLImageElement;
+        return { asset: el.getAttribute("src"), alt: el.getAttribute("alt") ?? "" };
+      },
+    },
+  ],
+  footnote_ref: [
+    {
+      tag: "sup.az-footnote-ref",
+      getAttrs: (dom: string | Node) => ({ id: (dom as HTMLElement).getAttribute("title") }),
+    },
+  ],
+  math_block: [
+    {
+      tag: "div.az-math[data-latex]",
+      getAttrs: (dom: string | Node) => ({ latex: (dom as HTMLElement).dataset.latex }),
+    },
+  ],
+  inline_math: [
+    {
+      tag: "code.az-inline-math[data-latex]",
+      getAttrs: (dom: string | Node) => ({ latex: (dom as HTMLElement).dataset.latex }),
+    },
+  ],
 };
 
 const markParseDOM: Record<string, AnySpec[]> = {

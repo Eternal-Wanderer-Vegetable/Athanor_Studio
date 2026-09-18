@@ -37,17 +37,44 @@ pub enum AttrSpec {
     OptText,
     /// 可空整数
     OptInt,
+    /// 跨度整数（colSpan/rowSpan）：PM 侧默认值是 1（prosemirror-tables
+    /// 的 TableMap 按 attrs.colspan 做算术，null 会算出 zero_sized 网格）。
+    /// 与 OptInt 的区别只在 schema 默认；写回逻辑同 OptInt（null/1 即默认）。
+    Span,
     /// 可空布尔
     OptBool,
     /// 透传 JSON（对象/数组），可空：columns / caption / extra / span_extra.data
     OptJson,
 }
 
-/// 单个 attr 定义。`name` 与 Prima 字段同名（`colSpan`/`rowSpan` 沿用 Prima JSON 改名）。
+/// 单个 attr 定义。`name` 与 Prima 字段同名；PM attr 名默认相同，
+/// prosemirror-tables 惯例用小写名的见 [`pm_attr_name`]。
 #[derive(Debug, Clone, Copy)]
 pub struct AttrDef {
     pub name: &'static str,
     pub spec: AttrSpec,
+}
+
+/// PM attr 名：Prima `colSpan`/`rowSpan` 在 PM 侧沿用 prosemirror-tables
+/// 惯例的 `colspan`/`rowspan`/`colwidth`，其余同名。
+pub fn pm_attr_name(name: &str) -> &str {
+    match name {
+        "colSpan" => "colspan",
+        "rowSpan" => "rowspan",
+        other => other,
+    }
+}
+
+/// prosemirror-tables 角色：table/row/cell/header_cell（含 isolating 语义）。
+/// 由 pm_name 查表，不进入 NodeDef 字段（避免每个定义重复声明）。
+pub fn table_role(pm_name: &str) -> Option<&'static str> {
+    Some(match pm_name {
+        "table" => "table",
+        "table_row" => "row",
+        "table_cell" => "cell",
+        "table_header" => "header_cell",
+        _ => return None,
+    })
 }
 
 const A_ID: AttrDef = AttrDef {
@@ -265,7 +292,7 @@ pub static NODES: &[NodeDef] = &[
         pm_name: "table_row",
         prima_type: None,
         group: "",
-        content: Some("table_cell*"),
+        content: Some("(table_cell | table_header)*"),
         code: false,
         id_kind: Some(IdKind::Row),
         attrs: &[A_ID, A_EXTRA],
@@ -286,15 +313,58 @@ pub static NODES: &[NodeDef] = &[
             },
             AttrDef {
                 name: "colSpan",
-                spec: AttrSpec::OptInt,
+                spec: AttrSpec::Span,
             },
             AttrDef {
                 name: "rowSpan",
-                spec: AttrSpec::OptInt,
+                spec: AttrSpec::Span,
+            },
+            AttrDef {
+                name: "role",
+                spec: AttrSpec::OptText,
+            },
+            // PM-only：列宽（像素），保存时归并进 columns[].width（spec §6.5）
+            AttrDef {
+                name: "colwidth",
+                spec: AttrSpec::OptJson,
             },
             A_EXTRA,
         ],
-        prima_fields: &["column", "colSpan", "rowSpan", "children"],
+        prima_fields: &["column", "colSpan", "rowSpan", "role", "children"],
+    },
+    // prosemirror-tables 的表头单元格：映射到 Prima cell role="header"
+    NodeDef {
+        pm_name: "table_header",
+        prima_type: None,
+        group: "",
+        content: Some("block*"),
+        code: false,
+        id_kind: Some(IdKind::Cel),
+        attrs: &[
+            A_ID,
+            AttrDef {
+                name: "column",
+                spec: AttrSpec::Int(0),
+            },
+            AttrDef {
+                name: "colSpan",
+                spec: AttrSpec::Span,
+            },
+            AttrDef {
+                name: "rowSpan",
+                spec: AttrSpec::Span,
+            },
+            AttrDef {
+                name: "role",
+                spec: AttrSpec::OptText,
+            },
+            AttrDef {
+                name: "colwidth",
+                spec: AttrSpec::OptJson,
+            },
+            A_EXTRA,
+        ],
+        prima_fields: &["column", "colSpan", "rowSpan", "role", "children"],
     },
     NodeDef {
         pm_name: "figure",
@@ -328,6 +398,17 @@ pub static NODES: &[NodeDef] = &[
     NodeDef {
         pm_name: "horizontal_rule",
         prima_type: Some("horizontal_rule"),
+        group: "block",
+        content: None,
+        code: false,
+        id_kind: Some(IdKind::Blk),
+        attrs: &[A_ID, A_EXTRA],
+        prima_fields: &[],
+    },
+    // E4：显式手动分页节点（分页是可观察 hint；DOCX ↔ w:br type="page"）。
+    NodeDef {
+        pm_name: "page_break",
+        prima_type: Some("page_break"),
         group: "block",
         content: None,
         code: false,

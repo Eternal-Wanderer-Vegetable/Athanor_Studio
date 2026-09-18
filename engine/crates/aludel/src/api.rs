@@ -18,13 +18,15 @@
 //!
 //! 保存管线（RFC §决策 3 / 落地方案 M6 验收）：
 //! 1. `pm_to_content_file`：PM JSON → Prima（ID 缺失/重复/非法按 IdKind 补发）
+//!    另含 `assets::persist_assets`：staged → embedded、`data:` → 迁移、
+//!    http(s) → external（spec/azodoc-package.md §4.2）；失败保留原引用并报告
 //! 2. `azodoc_model::validate::check_content`：规范级校验，Error 级拒绝保存
 //! 3. `set_entry("document/content.json")`
 //! 4. `relocate_annotations_layer`：标注随编辑自动重定位（验收④）
 //! 5. `Container::commit(author_type: "human")`（验收③，硬编码）
 //! 6. 可靠落盘：原子替换（临时文件 → sync → rename）；可携带
 //!    `expected_fingerprint` 在落盘前一刻检测外部改动
-//! 7. 响应：修订号 + ID 统计 + 重定位统计 + 文件指纹 + 容器警告
+//! 7. 响应：修订号 + ID 统计 + 重定位统计 + 资产统计 + 文件指纹 + 容器警告
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -35,6 +37,7 @@ use azodoc_model::id::{AzodocId, IdKind};
 use azodoc_model::validate::{self, Level};
 use serde_json::{json, Value};
 
+use crate::assets::{self, StagedAssets};
 use crate::doc_store::{self, Store};
 use crate::http::{Request, Response};
 
@@ -66,6 +69,8 @@ impl ApiError {
 pub struct App {
     /// 串行化 open/save/落盘，避免进程内并发读写同一文件
     state: Mutex<Store>,
+    /// 会话级资产暂存（未提交进容器；随 App 释放即清理）。
+    staged: StagedAssets,
 }
 
 impl App {
@@ -73,6 +78,7 @@ impl App {
     pub fn new(doc_path: PathBuf) -> Self {
         App {
             state: Mutex::new(Store::File(doc_path)),
+            staged: StagedAssets::default(),
         }
     }
 
@@ -80,7 +86,34 @@ impl App {
     pub fn new_draft(container_bytes: Vec<u8>) -> Self {
         App {
             state: Mutex::new(Store::Draft(container_bytes)),
+            staged: StagedAssets::default(),
         }
+    }
+
+    /// 暂存一条资产（mime 白名单 + 字节上限），返回 (as_ id, asset:// 引用)。
+    /// 引用写入 PM 正文；字节在下次保存落库。
+    pub fn stage_asset(
+        &self,
+        filename: &str,
+        mime: &str,
+        bytes: Vec<u8>,
+    ) -> Result<Value, ApiError> {
+        let (id, url) = assets::stage(&self.staged, filename, mime, bytes)?;
+        Ok(json!({ "id": id, "url": url }))
+    }
+
+    /// 读取资产供渲染：暂存区或 registry（embedded → 字节；external → url）。
+    pub fn read_asset(&self, id: &str) -> Result<assets::AssetRead, ApiError> {
+        let store = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let data = store
+            .read_bytes()
+            .map_err(|e| ApiError::Doc(format!("无法读取文档: {e}")))?;
+        let (mut c, _) = azodoc_container::open(data).map_err(|e| ApiError::Doc(e.friendly()))?;
+        assets::read_asset(
+            &mut |p| c.read_entry(p).map_err(|e| ApiError::Doc(e.friendly())),
+            &self.staged,
+            id,
+        )
     }
 
     /// 绑定的文件路径；草稿返回 None。
@@ -133,7 +166,8 @@ impl App {
             json!({"schema_version": "1.0", "annotations": []})
         };
 
-        let theme = if c.has_entry(THEME_ENTRY) {
+        let has_theme_layer = c.has_entry(THEME_ENTRY);
+        let theme = if has_theme_layer {
             let bytes = c
                 .read_entry(THEME_ENTRY)
                 .map_err(|e| ApiError::Doc(e.friendly()))?;
@@ -142,9 +176,27 @@ impl App {
             json!({})
         };
 
-        let history: Vec<Value> = c
-            .history()
-            .map_err(|e| ApiError::Doc(e.friendly()))?
+        let history_entries = c.history().map_err(|e| ApiError::Doc(e.friendly()))?;
+        // §5.3：当前修订未记录主题快照（仅正文历史）且存在 theme 层时，
+        // 如实提示——checkout 到这类修订表现层不落，不伪造主题。
+        let mut warnings = warnings;
+        if has_theme_layer {
+            if let Some(cur) = c.manifest_typed().current_revision.as_deref() {
+                let cur_has_theme = history_entries
+                    .iter()
+                    .find(|e| e.id == cur)
+                    .map(|e| e.theme_sha256.is_some())
+                    .unwrap_or(false);
+                if !cur_has_theme {
+                    warnings.push(
+                        "当前修订未记录表现层主题快照（仅正文历史）；主题继承自最近状态"
+                            .to_string(),
+                    );
+                }
+            }
+        }
+
+        let history: Vec<Value> = history_entries
             .iter()
             .map(|e| {
                 json!({
@@ -156,6 +208,7 @@ impl App {
                     "timestamp": e.timestamp,
                     "is_head": e.is_head,
                     "is_current": e.is_current,
+                    "theme_sha256": e.theme_sha256,
                 })
             })
             .collect();
@@ -201,26 +254,34 @@ impl App {
     }
 
     /// 校验→管线→产出容器字节（不写盘）。七步中第 1–5 步。
+    /// 返回 (容器字节, 响应 JSON, 已落库的暂存 id)；落库 id 供调用方
+    /// 在写盘成功后清理暂存表。
     fn produce_container_bytes(
         store: &Store,
+        staged: &StagedAssets,
         pm_doc: &Value,
         theme: Option<&Value>,
         message: &str,
         author_id: &str,
-    ) -> Result<(Vec<u8>, Value), ApiError> {
+    ) -> Result<(Vec<u8>, Value, Vec<String>), ApiError> {
         let (mut c, warnings) = Self::open_container_from(store)?;
 
         // 1. PM → Prima（ID 补发走引擎的 ULID 生成器）
         let mut idgen = |k: IdKind| -> String { AzodocId::generate(k).as_str().to_string() };
         let converted = azodoc_pm::pm_to_content_file(pm_doc, &mut idgen)
             .map_err(|e| ApiError::BadRequest(format!("ProseMirror → Prima 转换失败: {e}")))?;
+        let mut content_file = converted.content_file;
+
+        // 1b. 资产落库：staged → embedded、data: → 迁移、http(s) → external。
+        // 失败只保留原引用并报告，不产生悬空 asset://（spec §4.2.3）。
+        let assets_report = assets::persist_assets(&mut c, &mut content_file, staged)?;
 
         // 2. 规范级校验（Error 级拒绝；payload_ref/资产存在性经容器条目回调检查）
         let entry_exists = |p: &str| c.has_entry(p);
         let ctx = validate::Ctx {
             entry_exists: &entry_exists,
         };
-        let (issues, _) = validate::check_content(&converted.content_file, &ctx);
+        let (issues, _) = validate::check_content(&content_file, &ctx);
         let errors: Vec<Value> = issues
             .iter()
             .filter(|i| i.level == Level::Error)
@@ -240,7 +301,7 @@ impl App {
         }
 
         // 3. 写 content 层（set_entry 自动同步 manifest sha256）
-        let mut bytes = serde_json::to_vec_pretty(&converted.content_file)
+        let mut bytes = serde_json::to_vec_pretty(&content_file)
             .map_err(|e| ApiError::Doc(format!("content 序列化失败: {e}")))?;
         bytes.push(b'\n');
         c.set_entry(CONTENT_ENTRY, bytes)
@@ -294,8 +355,10 @@ impl App {
                     "moved": s.moved,
                     "detached": s.detached,
                 })),
+                "assets": assets_report.to_json(),
                 "warnings": warnings,
             }),
+            assets_report.persisted_ids,
         ))
     }
 
@@ -322,14 +385,16 @@ impl App {
         match &mut *store {
             Store::Draft(bytes) => {
                 // 草稿更新内存容器字节，不写盘——落盘必须经 save_at 明确选路径。
-                let (out, mut resp) = Self::produce_container_bytes(
+                let (out, mut resp, persisted) = Self::produce_container_bytes(
                     &Store::Draft(bytes.clone()),
+                    &self.staged,
                     pm_doc,
                     theme,
                     &message,
                     &author_id,
                 )?;
                 *bytes = out;
+                assets::drop_persisted(&self.staged, &persisted);
                 resp["fingerprint"] = json!(doc_store::sha256_hex(bytes));
                 resp["draft"] = json!(true);
                 Ok(resp)
@@ -338,12 +403,19 @@ impl App {
                 // 指纹复核在读容器之前：外部把文件改成非 Azodoc 时也能给出
                 // 冲突错误而不是容器解析错误。
                 Self::check_external_change(&store, expected)?;
-                let (out, mut resp) =
-                    Self::produce_container_bytes(&store, pm_doc, theme, &message, &author_id)?;
+                let (out, mut resp, persisted) = Self::produce_container_bytes(
+                    &store,
+                    &self.staged,
+                    pm_doc,
+                    theme,
+                    &message,
+                    &author_id,
+                )?;
                 let path = store.path().expect("File store 必有 path").to_path_buf();
                 // 第 6 步：原子替换（管线与落盘之间仍同一把锁，无窗口）
                 doc_store::atomic_write(&path, &out)
                     .map_err(|e| ApiError::Doc(format!("容器回写失败: {e}")))?;
+                assets::drop_persisted(&self.staged, &persisted);
                 resp["fingerprint"] = json!(doc_store::sha256_hex(&out));
                 resp["path"] = json!(path.display().to_string());
                 Ok(resp)
@@ -367,15 +439,151 @@ impl App {
             )));
         }
         let mut store = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        let (out, mut resp) =
-            Self::produce_container_bytes(&store, pm_doc, theme, &message, &author_id)?;
+        let (out, mut resp, persisted) = Self::produce_container_bytes(
+            &store,
+            &self.staged,
+            pm_doc,
+            theme,
+            &message,
+            &author_id,
+        )?;
         doc_store::atomic_write(&target, &out)
             .map_err(|e| ApiError::Doc(format!("写入 {} 失败: {e}", target.display())))?;
+        assets::drop_persisted(&self.staged, &persisted);
         store.bind_file(target.clone());
         resp["fingerprint"] = json!(doc_store::sha256_hex(&out));
         resp["path"] = json!(target.display().to_string());
         resp["saved_as"] = json!(true);
         Ok(resp)
+    }
+
+    /// POST /api/checkout —— 还原到某修订快照（E5，spec §5.3）。
+    /// content（与可选的主题快照）经原子写回；响应返回重开的文档全貌
+    /// 与 `theme_restored` 标记（未携带主题快照 = 仅正文历史，如实提示）。
+    pub fn checkout(&self, body: &Value) -> Result<Value, ApiError> {
+        let Some(rev) = body.get("revision").and_then(Value::as_str) else {
+            return Err(ApiError::BadRequest("缺少 revision 字段".into()));
+        };
+        let expected = body.get("expected_fingerprint").and_then(Value::as_str);
+        let theme_restored;
+        {
+            let mut store = self.state.lock().unwrap_or_else(|e| e.into_inner());
+            Self::check_external_change(&store, expected)?;
+            let (mut c, _) = Self::open_container_from(&store)?;
+            let info = c.checkout(rev).map_err(|e| ApiError::Doc(e.friendly()))?;
+            // 标注自动重定位（与 CLI checkout 同一语义）
+            let _ = athanor_cli::commands_m3::relocate_annotations_layer(&mut c)
+                .map_err(|e| ApiError::Doc(e.friendly()))?;
+            let out = c.write().map_err(|e| ApiError::Doc(e.friendly()))?;
+            match &mut *store {
+                Store::Draft(bytes) => *bytes = out,
+                Store::File(path) => {
+                    let path = path.clone();
+                    doc_store::atomic_write(&path, &out)
+                        .map_err(|e| ApiError::Doc(format!("容器回写失败: {e}")))?;
+                }
+            }
+            theme_restored = info.theme_restored;
+        }
+        // 重开拿到与 GET /api/doc 完全一致的全貌（PM/主题/历史/警告）。
+        let mut doc = self.open()?;
+        doc["theme_restored"] = json!(theme_restored);
+        Ok(doc)
+    }
+
+    /// POST /api/preview —— 印刷预览快照（E4）。
+    /// 与出版共用同一条渲染管线（load_export_doc + theme→@page CSS +
+    /// augment_print_html），但走 LayoutIndex 变体：块带 `data-block-id`，
+    /// polyfill 内嵌（iframe srcdoc 无相对路径）。快照指纹 =
+    /// pm_doc+theme 规范形 + PRINT_CSS_VERSION + 分页模式，预览/PDF 可核对。
+    pub fn preview(&self, body: &Value) -> Result<Value, ApiError> {
+        let Some(pm_doc) = body.get("pm_doc") else {
+            return Err(ApiError::BadRequest("缺少 pm_doc 字段".into()));
+        };
+        if !pm_doc.is_object() {
+            return Err(ApiError::BadRequest("pm_doc 必须是 JSON 对象".into()));
+        }
+        let theme = body.get("theme").cloned();
+        if let Some(t) = &theme {
+            if !t.is_object() {
+                return Err(ApiError::BadRequest("theme 必须是 JSON 对象".into()));
+            }
+        }
+
+        let store = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let (mut c, _) = Self::open_container_from(&store)?;
+
+        // 快照内容 = 前端送来的 PM 状态（未保存改动也参与预览）；
+        // 资产清单 = 容器 registry + 会话暂存（asset://as_* 的 data: 嵌入）。
+        let mut idgen = |k: azodoc_model::id::IdKind| -> String {
+            azodoc_model::id::AzodocId::generate(k).as_str().to_string()
+        };
+        let converted = azodoc_pm::pm_to_content_file(pm_doc, &mut idgen)
+            .map_err(|e| ApiError::BadRequest(format!("ProseMirror → Prima 转换失败: {e}")))?;
+        let mut doc = athanor_cli::commands_m5::load_export_doc(&mut c, None, None);
+        doc.content = converted.content_file.clone();
+        {
+            let staged = self.staged.lock().unwrap_or_else(|e| e.into_inner());
+            for (id, a) in staged.iter() {
+                doc.assets.push(azodoc_convert::ExportAsset {
+                    id: id.clone(),
+                    filename: a.filename.clone(),
+                    mime: a.mime.clone(),
+                    storage: "embedded".into(),
+                    url: None,
+                    bytes: Some(a.bytes.clone()),
+                });
+            }
+        }
+        let theme = theme.unwrap_or_else(|| {
+            c.read_entry(THEME_ENTRY)
+                .ok()
+                .and_then(|b| serde_json::from_slice(&b).ok())
+                .unwrap_or_else(|| json!({}))
+        });
+
+        let (print_html, page_size) =
+            athanor_cli::commands_m5::render_print_html_marked(&doc, &theme);
+        let html = azodoc_pdf::augment_print_html_inline(&print_html, doc.title.as_deref());
+
+        // 快照指纹：content_file 规范形 + theme + css 版本 + 分页模式。
+        // 预览与 PDF 是同一条渲染线的两次消费——hash 必须能互核。
+        let content_bytes = {
+            let mut b = serde_json::to_vec_pretty(&converted.content_file)
+                .map_err(|e| ApiError::Doc(format!("content 序列化失败: {e}")))?;
+            b.push(b'\n');
+            b
+        };
+        let content_hash = doc_store::sha256_hex(&content_bytes);
+        let theme_hash = doc_store::sha256_hex(
+            serde_json::to_string_pretty(&theme)
+                .unwrap_or_default()
+                .as_bytes(),
+        );
+        let layout_hash = {
+            use sha2::Digest;
+            let mut h = sha2::Sha256::new();
+            h.update(content_hash.as_bytes());
+            h.update(theme_hash.as_bytes());
+            h.update(athanor_cli::commands_m5::PRINT_CSS_VERSION.as_bytes());
+            h.update(b"pagedjs");
+            let d = h.finalize();
+            d.iter().map(|b| format!("{b:02x}")).collect::<String>()
+        };
+
+        Ok(json!({
+            "html": html,
+            // 未增强版本：分页不可用时的未分页回退呈现（plain fallback）。
+            "print_html": print_html,
+            "page_size": page_size,
+            "snapshot": {
+                "content_hash": content_hash,
+                "theme_hash": theme_hash,
+                "layout_hash": layout_hash,
+                "mode": "pagedjs",
+                "css_version": athanor_cli::commands_m5::PRINT_CSS_VERSION,
+            },
+        }))
     }
 
     /// POST /api/verify —— 复用 `athanor verify`（spec/azodoc-package.md §9 全检查）。
@@ -431,13 +639,62 @@ fn loss_summary(pm_doc: &Value, annotations: &Value) -> Value {
     })
 }
 
-/// 路由（静态冒烟页 + 三个 API）。
+/// 路由（静态冒烟页 + API）。
 pub fn route(app: &App, req: &Request) -> Response {
+    // 资产读取是动态路径（/api/asset/<as_id>），先于固定表匹配。
+    if req.method == "GET" {
+        if let Some(id) = req.path.strip_prefix("/api/asset/") {
+            if id.is_empty() || id.contains('/') {
+                return Response::json_with_status(400, &json!({ "error": "资产 id 非法" }));
+            }
+            return match app.read_asset(id) {
+                Ok(assets::AssetRead::Embedded { mime, bytes }) => Response::bytes(mime, bytes),
+                Ok(assets::AssetRead::External { url }) => Response::redirect(&url),
+                Ok(assets::AssetRead::Missing) => {
+                    Response::json_with_status(404, &json!({ "error": "资产不存在" }))
+                }
+                Err(e) => e.to_response(),
+            };
+        }
+    }
     match (req.method.as_str(), req.path.as_str()) {
         ("GET", "/") => Response::html(crate::INDEX_HTML),
         ("GET", "/api/doc") => respond(app.open()),
         ("POST", "/api/save") => match serde_json::from_slice::<Value>(&req.body) {
             Ok(v) => respond(app.save(&v)),
+            Err(e) => Response::json_with_status(
+                400,
+                &json!({ "error": format!("请求体不是合法 JSON: {e}") }),
+            ),
+        },
+        ("POST", "/api/asset/stage") => match serde_json::from_slice::<Value>(&req.body) {
+            Ok(v) => {
+                let filename = v.get("filename").and_then(Value::as_str).unwrap_or("");
+                let mime = v.get("mime").and_then(Value::as_str).unwrap_or("");
+                let data_b64 = v.get("data").and_then(Value::as_str).unwrap_or("");
+                use base64::Engine as _;
+                match base64::engine::general_purpose::STANDARD.decode(data_b64) {
+                    Ok(bytes) => respond(app.stage_asset(filename, mime, bytes)),
+                    Err(e) => Response::json_with_status(
+                        400,
+                        &json!({ "error": format!("data 不是合法 base64: {e}") }),
+                    ),
+                }
+            }
+            Err(e) => Response::json_with_status(
+                400,
+                &json!({ "error": format!("请求体不是合法 JSON: {e}") }),
+            ),
+        },
+        ("POST", "/api/preview") => match serde_json::from_slice::<Value>(&req.body) {
+            Ok(v) => respond(app.preview(&v)),
+            Err(e) => Response::json_with_status(
+                400,
+                &json!({ "error": format!("请求体不是合法 JSON: {e}") }),
+            ),
+        },
+        ("POST", "/api/checkout") => match serde_json::from_slice::<Value>(&req.body) {
+            Ok(v) => respond(app.checkout(&v)),
             Err(e) => Response::json_with_status(
                 400,
                 &json!({ "error": format!("请求体不是合法 JSON: {e}") }),

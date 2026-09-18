@@ -78,6 +78,18 @@ style=\"position:absolute;visibility:hidden;\">{}</span>",
     }
 }
 
+/// `augment_print_html` 的内嵌变体：polyfill 直接内联为 `<script>` 体，
+/// 供编辑器预览 iframe（srcdoc 没有相对路径可解析）。脚本体本身不含
+/// `</script`（vendored 资产已验证），可安全内嵌。
+pub fn augment_print_html_inline(html: &str, title: Option<&str>) -> String {
+    let inject_src = augment_print_html(html, title);
+    inject_src.replacen(
+        "<script src=\"./paged.polyfill.js\"></script>",
+        &format!("<script>\n{PAGED_POLYFILL_JS}\n</script>"),
+        1,
+    )
+}
+
 /// 把 polyfill 写到印刷 HTML 同目录（`<script src="./paged.polyfill.js">` 需要）。
 pub fn write_polyfill_assets(dir: &Path) -> std::io::Result<()> {
     std::fs::write(dir.join("paged.polyfill.js"), PAGED_POLYFILL_JS)
