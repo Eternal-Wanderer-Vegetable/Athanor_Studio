@@ -33,6 +33,7 @@ publication/
 revisions/
   chain.json                         ○ 可选；修订链索引
   <rev_id>/content.json              ○ 可选；各修订快照（快照模式）
+  <rev_id>/theme.json                ○ 可选；该修订时的表现层快照（见 §5.3）
 assets/
   registry.json                      ◆ 条件必须；content 引用了任何 asset:// 时必须存在
   <asset_id>/<filename>              ◆ 条件必须；与 registry 一一对应
@@ -142,6 +143,34 @@ reports/
 3. `storage: "external"` 的资产 MUST 带 `url`，其 `path`/文件体 MUST 缺席；
 4. R 中不被 A 引用的资产（孤儿）**允许存在**，MUST NOT 被工具自动清除（宁多勿删；垃圾回收是未来显式功能）。
 
+### 4.1 登记字段（冻结）
+
+registry 条目字段定义与约束见 [json-schema/assets.schema.json](json-schema/assets.schema.json)。补充语义：
+
+- `id`：`as_` + 26 位 ULID（azodoc-model.md §3），分配后不可复用；同一资产在全部修订间共享 ID。
+- `filename`：人读名，也是 `assets/<id>/<filename>` 的叶子名。写入器 MUST 在登记前清洗：仅保留 `[^\x00-\\x1f\\/:*?"<>|]` 之外的字符，剥离路径分隔与首尾空白/点号，结果为空则退回 `asset`；清洗前名 MAY 存入 `original_filename` 供追溯（R2 成员）。`filename` 不跨目录——资产路径恒为 `assets/<id>/<filename>` 两级。
+- `path`：embedded 资产在包内的相对路径，MUST 为 `assets/<id>/<filename>` 形态且满足 §5.1 路径规则（无 `..`、非绝对路径、无反斜杠）。verify 校验路径合法性与内容 sha256。
+- `sha256`：embedded = 资产文件体 SHA-256；external = URL 字符串字节（UTF-8）的 SHA-256，用于检测 URL 漂移而非内容一致性。
+- `storage`：`embedded`（包内携带字节）或 `external`（只登记 URL）。external 资产不参与离线展示；写入器 MUST NOT 静默下载外部 URL 转 embedded（用户显式操作为例外，且属于一次新资产登记）。
+- `relationship`：自由 token，本版约定 `inline`（正文内嵌）；未知 token 按 R2 保留。
+- `mime`：RFC 2046 媒体类型。字节级解码上限、MIME 白名单等**摄入上限属于工具策略**（如编辑器/导入器的资源管制），不是包契约——包契约只要求上述完整性（容器规范 §6 的 DoS 限制依然适用）。
+
+### 4.2 旧引用形态的读取与迁移（编辑器纪律）
+
+早于 registry 的工具/编辑器可能把资产写成 `asset` 字段中的 `data:` URI 或裸 `http(s)` URL。处置规则（冻结）：
+
+1. **读取**：读取器 MUST 能展示这些形态；`data:` URI 与外部 URL 不是 §4 的 `asset://` 引用，不纳入 A 集合，也不需要 registry 条目。verify 对非 `asset://` 的 `asset` 值按既有的「非 asset:// 引用」规则报告；编辑器读取路径 MUST NOT 因这些形态拒绝打开。
+2. **写入**：保存（编辑器显式保存/另存为）时，工具 SHOULD 把可达的 `data:` URI 解码登记为新 `as_` 资产并把引用改写为 `asset://<id>/<filename>`；这是一次**用户驱动的迁移**，不是打开时的自动改写。迁移后 registry/sha256 按 §4 一致性规则约束。
+3. **失败**：任一资产登记失败时 MUST 保留原引用并报告，不得产生悬空 `asset://` 引用；未提交的暂存资产随会话关闭/取消清理，孤儿资产按 §4.4 留待未来显式回收。
+
+### 4.3 预览快照（工具派生，不进包）
+
+预览/导出快照是**工具内存对象**，不落入包结构：
+
+- 快照身份 = `{ content_sha256, theme_sha256?, assets_sha256?, render_settings }` 的规范化 JSON 的 SHA-256；`assets_sha256` 为 registry 字节哈希。
+- `render_settings` 为工具自有的渲染参数对象（纸张/边距/字体/DPI 等），MUST 有 `version` 字段；预览、PDF、打印 MUST 复用同一快照与同一 `render_settings`。
+- 生成外部报告时 MAY 把快照哈希作为可选字段携带（azodoc-loss.md §4）。
+
 ---
 
 ## 5. preserved/ 与 reports/ 的纪律
@@ -156,6 +185,14 @@ reports/
 
 - 命名：`<direction>-<source_format>-<seq4>.json`，如 `import-markdown-0001.json`；`seq4` 全目录内单调递增。
 - 由转换器在每次跨格式转换时写入并在 manifest 登记（azodoc-loss.md §4）。
+
+### 5.3 表现层修订快照（可选）
+
+修订快照 MAY 同时落一份该修订时刻的 `presentation/theme.json` 副本：
+
+- 路径：`revisions/<rev_id>/theme.json`；存在时 `chain.json` 对应条目 MUST 携带 `theme_path` 与 `theme_sha256`（成员名冻结），缺任一为错误。
+- 携带 `theme_path`/`theme_sha256` 但文件缺失或哈希不符为错误；未携带任一成员即视为**仅正文历史**（checkout 时表现层不落，工具 SHOULD 提示而非伪造主题）。
+- 快照为 `presentation/theme.json` 的完整副本（schema_version 同主题层自身版本），非 diff；旧修订无此文件属正常历史形态，不是缺陷。
 
 ---
 
@@ -221,6 +258,7 @@ reports/
 | 7 | content.json Schema 校验（azodoc-model.md） | 错误 |
 | 8 | 资产一致性（§4 四条） | 错误 |
 | 9 | `current_revision` 与 `chain.head` 一致；各修订 `path`/`sha256` 有效 | 错误 |
+| 9b | 各修订 `theme_path`/`theme_sha256` 若携带：文件存在、哈希一致、两成员成对 | 错误 |
 | 10 | compatibility 状态重算（§6）；`status` 与判定不符 → 警告 | 警告 |
 | 11 | 未知内容盘点（§8） | 信息 |
 | 12 | 输出汇总：`有效/无效` + 错误数 + 警告数 + 损失档案摘要（聚合各 report 的 summary.loss） | — |

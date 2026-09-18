@@ -164,6 +164,9 @@ export const schemaSpec = {
         "rowSpan": {
           "default": null
         },
+        "role": {
+          "default": null
+        },
         "extra": {
           "default": null
         }

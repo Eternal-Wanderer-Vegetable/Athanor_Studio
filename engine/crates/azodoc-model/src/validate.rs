@@ -59,6 +59,14 @@ impl Issue {
             message: message.into(),
         }
     }
+    fn warning(code: &str, path: impl Into<String>, message: impl Into<String>) -> Self {
+        Issue {
+            level: Level::Warning,
+            code: code.to_string(),
+            path: path.into(),
+            message: message.into(),
+        }
+    }
 }
 
 /// 校验上下文：条目存在性回调（由容器层提供，用于 payload_ref / 资产路径检查）。
@@ -274,12 +282,17 @@ fn check_node(
             }
         }
         "table" => {
-            if node.get("columns").and_then(Value::as_array).is_none() {
+            let col_count = node
+                .get("columns")
+                .and_then(Value::as_array)
+                .map(|a| a.len());
+            if col_count.is_none() {
                 issues.push(Issue::error("table.columns", path, "table 缺少 columns"));
             }
             if node.get("rows").and_then(Value::as_array).is_none() {
                 issues.push(Issue::error("table.rows", path, "table 缺少 rows"));
             }
+            check_table_grid(node, path, col_count, issues);
         }
         "callout" => match node.get("variant").and_then(Value::as_str) {
             Some("note" | "tip" | "warning" | "important") => {}
@@ -474,6 +487,75 @@ fn check_spans(
                 issues,
                 asset_refs,
             );
+        }
+    }
+}
+
+/// 表格网格诊断（azodoc-model.md §6.5 不规则表规则）：
+/// 按 column/colSpan/rowSpan 重建占位矩阵，重叠或越界输出 Warning
+/// （table.irregular，不拒绝保存/打开；修复只在用户显式操作下发生）。
+fn check_table_grid(node: &Value, path: &str, col_count: Option<usize>, issues: &mut Vec<Issue>) {
+    let Some(rows) = node.get("rows").and_then(Value::as_array) else {
+        return;
+    };
+    let mut occupied: HashSet<(u64, u64)> = HashSet::new();
+    for (ri, row) in rows.iter().enumerate() {
+        let Some(cells) = row.get("cells").and_then(Value::as_array) else {
+            continue;
+        };
+        for (ci, cell) in cells.iter().enumerate() {
+            let Some(col) = cell.get("column").and_then(Value::as_u64) else {
+                continue; // 缺 column 已由 cell.column 错误覆盖
+            };
+            let cspan = cell
+                .get("colSpan")
+                .and_then(Value::as_u64)
+                .unwrap_or(1)
+                .max(1);
+            let rspan = cell
+                .get("rowSpan")
+                .and_then(Value::as_u64)
+                .unwrap_or(1)
+                .max(1);
+            let cell_path = format!("{path}.rows[{ri}].cells[{ci}]");
+
+            if let Some(ncols) = col_count {
+                if col.saturating_add(cspan) > ncols as u64 {
+                    issues.push(Issue::warning(
+                        "table.irregular",
+                        cell_path.clone(),
+                        format!(
+                            "单元格 column({col}) + colSpan({cspan}) 超出声明列数({ncols})——不规则表，仅诊断不自动重写"
+                        ),
+                    ));
+                }
+            }
+            if (ri as u64).saturating_add(rspan) > rows.len() as u64 {
+                issues.push(Issue::warning(
+                    "table.irregular",
+                    cell_path.clone(),
+                    format!(
+                        "单元格 rowSpan({rspan}) 超出剩余行数({})——不规则表，仅诊断不自动重写",
+                        rows.len() as u64 - ri as u64
+                    ),
+                ));
+            }
+            let mut overlap = false;
+            for dr in 0..rspan.min(64) {
+                for dc in 0..cspan.min(64) {
+                    let pos = (ri as u64 + dr, col + dc);
+                    if !occupied.insert(pos) {
+                        overlap = true;
+                    }
+                }
+            }
+            if overlap {
+                issues.push(Issue::warning(
+                    "table.irregular",
+                    cell_path,
+                    "单元格与既有占位重叠——不规则表，仅诊断不自动重写".to_string(),
+                ));
+            }
         }
     }
 }

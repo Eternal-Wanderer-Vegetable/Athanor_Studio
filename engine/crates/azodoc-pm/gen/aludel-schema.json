@@ -159,6 +159,9 @@
         "rowSpan": {
           "default": null
         },
+        "role": {
+          "default": null
+        },
         "extra": {
           "default": null
         }

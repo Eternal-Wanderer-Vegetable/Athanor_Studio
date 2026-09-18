@@ -112,6 +112,13 @@
 - 报告写入容器后 MUST 在 manifest.reports 登记（package §3.6）。
 - 同一文档多次转换产生多个报告，**互相独立、追加不覆盖**。
 
+### 4.4 扩展冻结（v1.0）
+
+- `report_version` 固定 `"1.0"`；新增成员只能**追加**（R2 原样保留），不得改变既有字段语义。
+- 能力矩阵（capability matrix）若引入，以可选成员 `capability: { "version": "…", "matrix": [ … ] }` 形式追加；矩阵版本独立于 `report_version`。
+- 预览快照哈希（azodoc-package.md §4.3）若需要入报告，以可选成员 `snapshot_sha256` 追加。
+- `issues[].feature` 的封闭 token 注册表可按上表注释追加；未知 token 始终按 R2 保留。
+
 ---
 
 ## 5. 各目标格式的 writer 义务矩阵

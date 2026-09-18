@@ -166,7 +166,7 @@ fn untagged_structs_match_schemars() {
     let col = find_struct_def(&schema, "TableColumn").expect("schemars $defs 找不到 TableColumn");
     assert_eq!(
         prop_names(col),
-        vec!["id", "name"],
+        vec!["id", "name", "width"],
         "TableColumn 形状变化时须同步 table.columns attr 约定"
     );
     let table = NODES

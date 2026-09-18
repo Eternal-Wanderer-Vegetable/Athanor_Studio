@@ -59,6 +59,11 @@
           "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$))[^\\x00\\\\]+$"
         },
         "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "theme_path": {
+          "type": "string",
+          "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$))[^\\x00\\\\]+$"
+        },
+        "theme_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
         "changes": { "type": "object" }
       }
     }

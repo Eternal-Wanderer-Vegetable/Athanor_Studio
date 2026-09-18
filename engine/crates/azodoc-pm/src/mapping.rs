@@ -292,9 +292,13 @@ pub static NODES: &[NodeDef] = &[
                 name: "rowSpan",
                 spec: AttrSpec::OptInt,
             },
+            AttrDef {
+                name: "role",
+                spec: AttrSpec::OptText,
+            },
             A_EXTRA,
         ],
-        prima_fields: &["column", "colSpan", "rowSpan", "children"],
+        prima_fields: &["column", "colSpan", "rowSpan", "role", "children"],
     },
     NodeDef {
         pm_name: "figure",

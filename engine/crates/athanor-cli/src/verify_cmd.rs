@@ -576,6 +576,28 @@ fn verify_revisions(
             } else {
                 errors.push(format!("revisions[{i}]: 快照缺少 path"));
             }
+            // (9b) 表现层修订快照（spec/azodoc-package.md §5.3）：成员成对 + 一致性
+            let theme_path = r.get("theme_path").and_then(Value::as_str);
+            let theme_sha = r.get("theme_sha256").and_then(Value::as_str);
+            match (theme_path, theme_sha) {
+                (None, None) => {}
+                (Some(tp), Some(ts)) => {
+                    referenced.push(tp.to_string());
+                    match c.read_entry(tp) {
+                        Err(_) => errors.push(format!("revisions[{i}]: 表现层快照缺失（{tp}）")),
+                        Ok(bytes) => {
+                            if crate::sha256_hex(&bytes) != ts {
+                                errors.push(format!(
+                                    "revisions[{i}]: 表现层快照 sha256 不匹配（{tp}）"
+                                ));
+                            }
+                        }
+                    }
+                }
+                _ => errors.push(format!(
+                    "revisions[{i}]: theme_path/theme_sha256 必须成对出现"
+                )),
+            }
         }
     }
 }
