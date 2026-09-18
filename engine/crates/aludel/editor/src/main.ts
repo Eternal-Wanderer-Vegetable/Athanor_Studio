@@ -24,6 +24,14 @@ import { schema } from "./schema";
 import { DocumentController, errText } from "./app/document-controller";
 import { CommandRegistry, type CommandContext } from "./app/command-registry";
 import { findAll, selectMatch, replaceCurrent, replaceAll } from "./app/find";
+import {
+  setParagraphFormat,
+  setCharacterFormat,
+  clearParagraphFormat,
+  clearCharacterFormat,
+  activeCharacterFormat,
+  activeParagraphFormat,
+} from "./app/format";
 import { TauriGateway } from "./platform/tauri";
 import { HttpGateway } from "./platform/http";
 import { $, renderOutline, renderSidebar, renderStatusBar, setMsg } from "./ui/panels";
@@ -122,12 +130,93 @@ reg("format.link", "链接", () => {
   const url = window.prompt("链接 URL：");
   if (url) toggleMark(schema.marks.link, { url })(v.state, v.dispatch);
 });
+reg("format.font", "字体", () => {}, {});
+reg("format.size", "字号", () => {}, {});
+reg("format.color", "文字颜色", () => {}, {});
+reg("format.highlight", "高亮", () => {}, {});
+reg("para.alignLeft", "左对齐", () => applyPara({ align: "left" }), { active: () => paraIs("align", "left") });
+reg("para.alignCenter", "居中", () => applyPara({ align: "center" }), { active: () => paraIs("align", "center") });
+reg("para.alignRight", "右对齐", () => applyPara({ align: "right" }), { active: () => paraIs("align", "right") });
+reg("para.alignJustify", "两端对齐", () => applyPara({ align: "justify" }), { active: () => paraIs("align", "justify") });
+reg("para.indentMore", "增加缩进", () => {
+  const cur = ctl.view ? activeParagraphFormat(ctl.view).indentStartPt ?? 0 : 0;
+  applyPara({ indentStartPt: Math.min(600, cur + 24) });
+});
+reg("para.indentLess", "减少缩进", () => {
+  const cur = ctl.view ? activeParagraphFormat(ctl.view).indentStartPt ?? 0 : 0;
+  applyPara({ indentStartPt: cur - 24 > 0 ? cur - 24 : undefined });
+});
+reg("format.clear", "清除格式", () => {
+  const v = ctl.view;
+  if (!v) return;
+  clearParagraphFormat(v.state, v.dispatch);
+  clearCharacterFormat(v.state, v.dispatch);
+});
+
+function applyPara(patch: Parameters<typeof setParagraphFormat>[2]): void {
+  const v = ctl.view;
+  if (v) setParagraphFormat(v.state, v.dispatch, patch);
+}
+
+function applyChar(patch: Parameters<typeof setCharacterFormat>[2]): void {
+  const v = ctl.view;
+  if (v) setCharacterFormat(v.state, v.dispatch, patch);
+}
+
+function paraIs(key: "align", value: string): boolean {
+  const v = ctl.view;
+  if (!v) return false;
+  return activeParagraphFormat(v)[key] === value;
+}
 reg("block.para", "正文", () => pmRun(setBlockType(schema.nodes.paragraph) as never));
 reg("block.h1", "标题 1", () => pmRun(setBlockType(schema.nodes.heading, { level: 1 }) as never));
 reg("block.h2", "标题 2", () => pmRun(setBlockType(schema.nodes.heading, { level: 2 }) as never));
 reg("block.h3", "标题 3", () => pmRun(setBlockType(schema.nodes.heading, { level: 3 }) as never));
 reg("block.quote", "引用", () => pmRun(wrapIn(schema.nodes.quote) as never));
 reg("block.codeblock", "代码块", () => pmRun(setBlockType(schema.nodes.code_block, { language: null }) as never));
+function newId(prefix: "blk" | "row" | "cel" | "col"): string {
+  // Azodoc IDs use Crockford ULID, so newly inserted nodes are valid before
+  // the first save (the Rust converter can still repair imported IDs).
+  const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+  let time = BigInt(Date.now());
+  let suffix = "";
+  for (let i = 0; i < 10; i++) {
+    suffix = alphabet[Number(time & 31n)] + suffix;
+    time >>= 5n;
+  }
+  const bytes = new Uint8Array(16);
+  globalThis.crypto?.getRandomValues(bytes);
+  let random = "";
+  for (const byte of bytes) random += alphabet[byte & 31];
+  return `${prefix}_${suffix}${random}`;
+}
+reg("insert.table", "表格", () => {
+  const v = ctl.view;
+  if (!v) return;
+  const rows = Array.from({ length: 2 }, () => schema.nodes.table_row.create(
+      { id: newId("row") },
+    Array.from({ length: 2 }, (_, column) => schema.nodes.table_cell.create(
+      { id: newId("cel"), column },
+      schema.nodes.paragraph.create({ id: newId("blk") }),
+    )),
+  ));
+  const columns = [0, 1].map((index) => ({ id: newId("col"), name: `列 ${index + 1}` }));
+  const table = schema.nodes.table.create({ id: newId("blk"), columns }, rows);
+  v.dispatch(v.state.tr.replaceSelectionWith(table));
+});
+reg("insert.image", "图片", () => {
+  const v = ctl.view;
+  if (!v) return;
+  const asset = window.prompt("图片 URL 或 asset:// 引用：", "https://");
+  if (!asset) return;
+  const alt = window.prompt("替代文字（可选）：", "") ?? "";
+  const image = schema.nodes.image.create({ id: newId("blk"), asset, alt });
+  v.dispatch(v.state.tr.replaceSelectionWith(image));
+});
+reg("insert.rule", "分隔线", () => {
+  const v = ctl.view;
+  if (v) v.dispatch(v.state.tr.replaceSelectionWith(schema.nodes.horizontal_rule.create()));
+});
 reg("insert.math", "数学块", () => {
   const v = ctl.view;
   if (!v) return;
@@ -160,7 +249,12 @@ function bindButton(id: string, commandId: string): void {
   const el = $(id) as HTMLButtonElement;
   const cmd = registry.get(commandId);
   if (cmd?.shortcut) el.title = `${cmd.label} (${cmd.shortcut})`;
-  el.addEventListener("click", () => void registry.run(commandId, ctx()));
+  el.addEventListener("click", () => {
+    void registry.run(commandId, ctx()).finally(() => {
+      // Word 风格工具栏：命令执行后把输入焦点还给正文，保留原选区继续输入。
+      if (ctl.view && !["file.new", "file.open", "file.close"].includes(commandId)) ctl.view.focus();
+    });
+  });
 }
 
 function refreshUI(): void {
@@ -182,11 +276,23 @@ function refreshUI(): void {
     revision: s.revision,
     zoom,
   });
+  // 格式控件回显（选区所在位置的字符格式）
+  if (ctl.view && !ctl.composing) {
+    const cf = activeCharacterFormat(ctl.view);
+    const fontSel = $("tb-font") as HTMLSelectElement;
+    const sizeSel = $("tb-size") as HTMLSelectElement;
+    if (document.activeElement !== fontSel) fontSel.value = cf.fontFamily ?? "";
+    if (document.activeElement !== sizeSel) sizeSel.value = cf.fontSizePt ? String(cf.fontSizePt) : "";
+    const colEl = $("tb-color") as HTMLInputElement;
+    if (document.activeElement !== colEl && cf.color) colEl.value = cf.color;
+    const hlEl = $("tb-highlight") as HTMLInputElement;
+    if (document.activeElement !== hlEl && cf.highlight) hlEl.value = cf.highlight;
+  }
 }
 
 function setZoom(z: number): void {
   zoom = Math.min(2.5, Math.max(0.5, z));
-  $("editor").style.fontSize = `${zoom}em`;
+  ($("editor").closest(".page") as HTMLElement | null)?.style.setProperty("zoom", String(zoom));
   refreshUI();
 }
 
@@ -215,6 +321,8 @@ function updateFindCount(): void {
 // ---------------------------------------------------------------- 快捷键
 
 function onKeydown(e: KeyboardEvent): void {
+  const target = e.target as HTMLElement | null;
+  if (target?.matches("input, textarea, select, [contenteditable=false]")) return;
   const mod = e.ctrlKey || e.metaKey;
   if (!mod) return;
   const k = e.key.toLowerCase();
@@ -252,7 +360,10 @@ async function boot(): Promise<void> {
     ["tb-h3", "block.h3"],
     ["tb-quote", "block.quote"],
     ["tb-codeblock", "block.codeblock"],
+    ["tb-table", "insert.table"],
+    ["tb-image", "insert.image"],
     ["tb-math", "insert.math"],
+    ["tb-rule", "insert.rule"],
     ["tb-strong", "format.strong"],
     ["tb-em", "format.em"],
     ["tb-underline", "format.underline"],
@@ -269,8 +380,30 @@ async function boot(): Promise<void> {
     ["sb-zoom-in", "view.zoomIn"],
     ["sb-zoom-out", "view.zoomOut"],
     ["sb-zoom-reset", "view.zoomReset"],
+    ["tb-align-left", "para.alignLeft"],
+    ["tb-align-center", "para.alignCenter"],
+    ["tb-align-right", "para.alignRight"],
+    ["tb-align-justify", "para.alignJustify"],
+    ["tb-indent-more", "para.indentMore"],
+    ["tb-indent-less", "para.indentLess"],
+    ["tb-clear-format", "format.clear"],
   ];
   for (const [el, cmd] of bindings) bindButton(el, cmd);
+
+  // 下拉/颜色控件（非按钮）
+  $("tb-font").addEventListener("change", (e) => {
+    applyChar({ fontFamily: (e.target as HTMLSelectElement).value || undefined });
+  });
+  $("tb-size").addEventListener("change", (e) => {
+    const v = Number((e.target as HTMLSelectElement).value);
+    applyChar({ fontSizePt: Number.isFinite(v) && v > 0 ? v : undefined });
+  });
+  $("tb-color").addEventListener("input", (e) => {
+    applyChar({ color: (e.target as HTMLInputElement).value });
+  });
+  $("tb-highlight").addEventListener("input", (e) => {
+    applyChar({ highlight: (e.target as HTMLInputElement).value });
+  });
 
   $("find-close").addEventListener("click", () => toggleFindBar(false));
   $("find-input").addEventListener("input", updateFindCount);

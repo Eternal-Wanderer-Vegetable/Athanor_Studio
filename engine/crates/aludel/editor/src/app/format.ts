@@ -1,0 +1,262 @@
+// This file is part of Athanor, the Azodoc document engine.
+// Copyright (C) 2026 The Athanor Studio Developers
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published
+// by the Free Software Foundation, version 3 of the License only.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+//! 格式扩展（x-athanor-format）：受控、有界的格式键集合。
+//!
+//! 存储：块级段落格式存节点 attrs.extra["x-athanor-format"].paragraph；
+//! 字符格式存 span_extra mark attrs.data["x-athanor-format"].character。
+//! 两条通道都经 ExtraMap 往返（to_prima 平铺 / from_prima 收集），
+//! 未识别键原样保留；清除格式只删受控键。
+
+import type { Attrs, Node as PMNode } from "prosemirror-model";
+import type { EditorState, Transaction } from "prosemirror-state";
+import type { EditorView } from "prosemirror-view";
+
+export const FORMAT_KEY = "x-athanor-format";
+
+export interface ParagraphFormat {
+  align?: "left" | "center" | "right" | "justify";
+  indentStartPt?: number;
+  indentEndPt?: number;
+  firstLinePt?: number;
+  lineHeight?: number;
+  spaceBeforePt?: number;
+  spaceAfterPt?: number;
+  keepWithNext?: boolean;
+  breakBefore?: boolean;
+}
+
+export interface CharacterFormat {
+  fontFamily?: string;
+  fontSizePt?: number;
+  color?: string;
+  highlight?: string;
+  verticalAlign?: "sub" | "super";
+}
+
+// ---------------------------------------------------------------- 读取
+
+type ExtraMap = Record<string, unknown>;
+
+function extraOf(attrs: Attrs | null | undefined): ExtraMap {
+  const e = attrs?.extra;
+  return e && typeof e === "object" ? (e as ExtraMap) : {};
+}
+
+function formatOf(extra: ExtraMap): ExtraMap {
+  const f = extra[FORMAT_KEY];
+  return f && typeof f === "object" ? (f as ExtraMap) : {};
+}
+
+export function paragraphFormat(node: PMNode): ParagraphFormat {
+  return { ...(formatOf(extraOf(node.attrs))["paragraph"] as ParagraphFormat | undefined) };
+}
+
+// ---------------------------------------------------------------- 写入（块）
+
+/** 对选区内所有块级节点合并段落格式 patch（null/undefined 值删除该键）。 */
+export function setParagraphFormat(state: EditorState, dispatch: (tr: Transaction) => void, patch: ParagraphFormat): boolean {
+  const { from, to } = state.selection;
+  const tr = state.tr;
+  let touched = false;
+  state.doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isBlock || node.isTextblock === false || !node.attrs || !("extra" in node.attrs)) return true;
+    const extra = { ...extraOf(node.attrs) };
+    const fmt = { ...formatOf(extra) };
+    const para = { ...(fmt["paragraph"] as ParagraphFormat | undefined) };
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === undefined || v === null) delete (para as Record<string, unknown>)[k];
+      else (para as Record<string, unknown>)[k] = v;
+    }
+    if (Object.keys(para).length === 0) delete fmt["paragraph"];
+    else fmt["paragraph"] = para;
+    if (Object.keys(fmt).length === 0) delete extra[FORMAT_KEY];
+    else extra[FORMAT_KEY] = fmt;
+    tr.setNodeAttribute(pos, "extra", Object.keys(extra).length ? extra : null);
+    touched = true;
+    return true;
+  });
+  if (touched) dispatch(tr);
+  return touched;
+}
+
+/** 清除选区块的全部受控段落格式（不动其他 extra 键）。 */
+export function clearParagraphFormat(state: EditorState, dispatch: (tr: Transaction) => void): boolean {
+  return setParagraphFormat(state, dispatch, {
+    align: undefined,
+    indentStartPt: undefined,
+    indentEndPt: undefined,
+    firstLinePt: undefined,
+    lineHeight: undefined,
+    spaceBeforePt: undefined,
+    spaceAfterPt: undefined,
+    keepWithNext: undefined,
+    breakBefore: undefined,
+  });
+}
+
+// ---------------------------------------------------------------- 写入（行内）
+
+function spanExtraMark(state: EditorState): { data: ExtraMap } | null {
+  const { empty, $from, from, to } = state.selection;
+  const mark = state.schema.marks.span_extra;
+  if (!mark) return null;
+  if (empty) {
+    const m = (state.storedMarks ?? $from.marks()).find((x) => x.type === mark);
+    return m ? { data: (m.attrs.data as ExtraMap) ?? {} } : null;
+  }
+  let found: { data: ExtraMap } | null = null;
+  state.doc.nodesBetween(from, to, (node) => {
+    if (found) return false;
+    const m = node.marks.find((x) => x.type === mark);
+    if (m) found = { data: (m.attrs.data as ExtraMap) ?? {} };
+    return true;
+  });
+  return found;
+}
+
+/** 对选区施加字符格式 patch（合并进现有 span_extra.data，保留其他键）。 */
+export function setCharacterFormat(state: EditorState, dispatch: (tr: Transaction) => void, patch: CharacterFormat): boolean {
+  const mark = state.schema.marks.span_extra;
+  if (!mark) return false;
+  const { empty, from, to } = state.selection;
+  const tr = state.tr;
+  if (empty) {
+    // 无选区：写入 storedMarks，作用于后续输入
+    const existing = spanExtraMark(state)?.data ?? {};
+    const data = patchSpanExtra(existing, patch);
+    const stripped = tr.storedMarks?.filter((m) => m.type !== mark) ?? [];
+    tr.setStoredMarks(Object.keys(data).length ? [...stripped, mark.create({ data })] : stripped);
+  } else {
+    // 混合格式选区必须逐文本节点合并，不能把第一个 span 的未知扩展复制到整段。
+    tr.removeMark(from, to, mark);
+    state.doc.nodesBetween(from, to, (node, pos) => {
+      if (!node.isText) return true;
+      const start = Math.max(from, pos);
+      const end = Math.min(to, pos + node.nodeSize);
+      if (start >= end) return true;
+      const existing = node.marks.find((m) => m.type === mark)?.attrs.data;
+      const data = patchSpanExtra(existing && typeof existing === "object" ? (existing as ExtraMap) : {}, patch);
+      if (Object.keys(data).length) tr.addMark(start, end, mark.create({ data }));
+      return true;
+    });
+  }
+  dispatch(tr);
+  return true;
+}
+
+function patchSpanExtra(existing: ExtraMap, patch: CharacterFormat): ExtraMap {
+  const fmt = { ...((existing[FORMAT_KEY] as ExtraMap) ?? {}) };
+  const ch = { ...((fmt["character"] as CharacterFormat) ?? {}) };
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === undefined || v === null) delete (ch as Record<string, unknown>)[k];
+    else (ch as Record<string, unknown>)[k] = v;
+  }
+  if (Object.keys(ch).length === 0) delete fmt["character"];
+  else fmt["character"] = ch;
+  const data = { ...existing };
+  if (Object.keys(fmt).length === 0) delete data[FORMAT_KEY];
+  else data[FORMAT_KEY] = fmt;
+  return data;
+}
+
+export function clearCharacterFormat(state: EditorState, dispatch: (tr: Transaction) => void): boolean {
+  return setCharacterFormat(state, dispatch, {
+    fontFamily: undefined,
+    fontSizePt: undefined,
+    color: undefined,
+    highlight: undefined,
+    verticalAlign: undefined,
+  });
+}
+
+// ---------------------------------------------------------------- CSS 映射
+
+function pt(v: unknown): string | null {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 && n <= 999 ? `${n}pt` : null;
+}
+
+function color(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const m = /^#([0-9a-fA-F]{6})$/.exec(v);
+  return m ? v.toLowerCase() : null;
+}
+
+function family(v: unknown): string | null {
+  if (typeof v !== "string" || v.length > 200) return null;
+  // 拒绝引号/分号等 CSS 注入字符
+  return v.trim() && !/[\u0000-\u001f\u007f\\'";{}<>]/.test(v) ? v : null;
+}
+
+export function paragraphCss(f: ParagraphFormat): string {
+  const parts: string[] = [];
+  if (f.align && ["left", "center", "right", "justify"].includes(f.align)) {
+    parts.push(`text-align:${f.align}`);
+  }
+  const start = pt(f.indentStartPt);
+  if (start) parts.push(`padding-left:${start}`);
+  const end = pt(f.indentEndPt);
+  if (end) parts.push(`padding-right:${end}`);
+  const first = pt(f.firstLinePt);
+  if (first) parts.push(`text-indent:${first}`);
+  if (typeof f.lineHeight === "number" && f.lineHeight > 0.5 && f.lineHeight <= 5) {
+    parts.push(`line-height:${f.lineHeight}`);
+  }
+  const before = pt(f.spaceBeforePt);
+  if (before) parts.push(`margin-top:${before}`);
+  const after = pt(f.spaceAfterPt);
+  if (after) parts.push(`margin-bottom:${after}`);
+  if (f.keepWithNext) parts.push("break-after:avoid");
+  if (f.breakBefore) parts.push("break-before:page");
+  return parts.join(";");
+}
+
+export function characterCss(f: CharacterFormat): string {
+  const parts: string[] = [];
+  const fam = family(f.fontFamily);
+  if (fam) parts.push(`font-family:${fam}`);
+  const size = pt(f.fontSizePt);
+  if (size) parts.push(`font-size:${size}`);
+  const col = color(f.color);
+  if (col) parts.push(`color:${col}`);
+  const hl = color(f.highlight);
+  if (hl) parts.push(`background-color:${hl}`);
+  if (f.verticalAlign === "sub" || f.verticalAlign === "super") {
+    parts.push(`vertical-align:${f.verticalAlign}`);
+  }
+  return parts.join(";");
+}
+
+/** 当前选区首个 span_extra 字符格式（工具栏回显用）。 */
+export function activeCharacterFormat(view: EditorView): CharacterFormat {
+  const { $from } = view.state.selection;
+  const mark = view.state.schema.marks.span_extra;
+  if (!mark) return {};
+  const m = (view.state.storedMarks ?? $from.marks()).find((x) => x.type === mark);
+  const data = (m?.attrs.data as ExtraMap) ?? {};
+  const fmt = (data[FORMAT_KEY] as ExtraMap) ?? {};
+  return { ...((fmt["character"] as CharacterFormat) ?? {}) };
+}
+
+/** 选区所在块的段落格式（工具栏回显）。 */
+export function activeParagraphFormat(view: EditorView): ParagraphFormat {
+  const { $from } = view.state.selection;
+  for (let d = $from.depth; d >= 0; d--) {
+    const n = $from.node(d);
+    if (n.isBlock) return paragraphFormat(n);
+  }
+  return {};
+}

@@ -19,6 +19,13 @@
 
 import { Schema, type Node as PMNode } from "prosemirror-model";
 import schemaSpec from "../../../azodoc-pm/gen/aludel-schema.json";
+import {
+  FORMAT_KEY,
+  characterCss,
+  paragraphCss,
+  type CharacterFormat,
+  type ParagraphFormat,
+} from "./app/format";
 
 // eslint 风格豁免：toDOM/parseDOM 表的值类型由 PM NodeSpec 宽容接收
 type AnySpec = unknown;
@@ -27,6 +34,54 @@ const spec = schemaSpec as unknown as {
   nodes: Record<string, Record<string, unknown>>;
   marks: Record<string, Record<string, unknown>>;
 };
+
+// ---------------------------------------------------------------- 格式扩展
+
+type ExtraBag = Record<string, unknown>;
+
+function extraOf(node: PMNode): ExtraBag {
+  const e = node.attrs.extra;
+  return e && typeof e === "object" ? (e as ExtraBag) : {};
+}
+
+function fmtOf(node: PMNode): ExtraBag {
+  const f = extraOf(node)[FORMAT_KEY];
+  return f && typeof f === "object" ? (f as ExtraBag) : {};
+}
+
+/** 块级节点的段落格式 → CSS 字符串（无效值被忽略，不输出）。 */
+function paraStyle(node: PMNode): string {
+  return paragraphCss({ ...(fmtOf(node)["paragraph"] as ParagraphFormat | undefined) });
+}
+
+function charStyleFromData(data: unknown): string {
+  const d = data && typeof data === "object" ? (data as ExtraBag) : {};
+  const fmt = d[FORMAT_KEY] && typeof d[FORMAT_KEY] === "object" ? (d[FORMAT_KEY] as ExtraBag) : {};
+  return characterCss({ ...(fmt["character"] as CharacterFormat | undefined) });
+}
+
+/** 剪贴板解析：DOM 样式 → 受控格式 patch（白名单，其他样式一律不进文档）。 */
+function paraFormatFromDom(dom: HTMLElement): ParagraphFormat {
+  const out: ParagraphFormat = {};
+  const s = dom.style;
+  const align = s.textAlign;
+  if (align === "left" || align === "center" || align === "right" || align === "justify") {
+    out.align = align;
+  }
+  const ptNum = (v: string): number | undefined => {
+    const m = /^([\d.]+)pt$/.exec(v);
+    return m ? Number(m[1]) : undefined;
+  };
+  const pl = ptNum(s.paddingLeft);
+  if (pl !== undefined) out.indentStartPt = pl;
+  const pr = ptNum(s.paddingRight);
+  if (pr !== undefined) out.indentEndPt = pr;
+  const ti = ptNum(s.textIndent);
+  if (ti !== undefined) out.firstLinePt = ti;
+  const lh = Number(s.lineHeight);
+  if (Number.isFinite(lh) && lh > 0.5 && lh <= 5) out.lineHeight = lh;
+  return out;
+}
 
 /** Prima 资产引用（asset://<id>/<path>）→ 可展示 URL；非 http(s) 的返回 null，
  * 由 toDOM 渲染为占位框（真实资源解析属表现层/导出，编辑器内不假装能加载）。 */
@@ -54,8 +109,14 @@ function captionText(caption: unknown): string {
 
 const nodeToDOM: Record<string, (node: PMNode) => AnySpec> = {
   section: () => ["div", { class: "az-section" }, 0],
-  paragraph: () => ["p", 0],
-  heading: (node) => ["h" + Math.min(6, Math.max(1, Number(node.attrs.level) || 1)), 0],
+  paragraph: (node) => {
+    const style = paraStyle(node);
+    return ["p", style ? { style } : {}, 0];
+  },
+  heading: (node) => {
+    const style = paraStyle(node);
+    return ["h" + Math.min(6, Math.max(1, Number(node.attrs.level) || 1)), style ? { style } : {}, 0];
+  },
   quote: () => ["blockquote", 0],
   list: (node) =>
     node.attrs.style === "ordered"
@@ -157,12 +218,20 @@ const markToDOM: Record<string, (mark: PMNode) => AnySpec> = {
   underline: () => ["u", 0],
   strike: () => ["s", 0],
   code: () => ["code", 0],
-  // 内部隐形标记：Text.extra 的载体（span_extra），DOM 中不可见
-  span_extra: (mark) => [
-    "span",
-    { class: "az-extra", style: "display:none", "data-extra": JSON.stringify(mark.attrs.data) },
-    0,
-  ],
+  // Text.extra 的载体（span_extra）：不再 display:none——携带未知键的正文必须可见；
+  // 受控字符格式（x-athanor-format.character）映射为内联样式。
+  span_extra: (mark) => {
+    const style = charStyleFromData(mark.attrs.data);
+    return [
+      "span",
+      {
+        class: "az-extra",
+        ...(style ? { style } : {}),
+        "data-extra": JSON.stringify(mark.attrs.data),
+      },
+      0,
+    ];
+  },
 };
 
 // ---------------------------------------------------------------- parseDOM
@@ -170,10 +239,28 @@ const markToDOM: Record<string, (mark: PMNode) => AnySpec> = {
 
 const nodeParseDOM: Record<string, AnySpec[]> = {
   section: [{ tag: "div[data-az-section]" }],
-  paragraph: [{ tag: "p" }],
+  paragraph: [
+    {
+      tag: "p",
+      getAttrs: (dom: string | Node) => {
+        const para = paraFormatFromDom(dom as HTMLElement);
+        return Object.keys(para).length
+          ? { extra: { [FORMAT_KEY]: { version: 1, paragraph: para } } }
+          : {};
+      },
+    },
+  ],
   heading: [1, 2, 3, 4, 5, 6].map((level) => ({
     tag: `h${level}`,
-    attrs: { level },
+    getAttrs: (dom: string | Node) => {
+      const para = paraFormatFromDom(dom as HTMLElement);
+      return {
+        level,
+        ...(Object.keys(para).length
+          ? { extra: { [FORMAT_KEY]: { version: 1, paragraph: para } } }
+          : {}),
+      };
+    },
   })),
   quote: [{ tag: "blockquote" }],
   list: [
@@ -221,6 +308,19 @@ const markParseDOM: Record<string, AnySpec[]> = {
   underline: [{ tag: "u" }],
   strike: [{ tag: "s" }, { tag: "del" }],
   code: [{ tag: "code" }],
+  span_extra: [{
+    tag: "span.az-extra[data-extra]",
+    getAttrs: (dom: string | Node) => {
+      try {
+        const raw = (dom as HTMLElement).getAttribute("data-extra");
+        if (!raw) return false;
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" ? { data: parsed } : false;
+      } catch {
+        return false;
+      }
+    },
+  }],
 };
 
 // ---------------------------------------------------------------- 组装

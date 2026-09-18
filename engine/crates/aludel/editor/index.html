@@ -115,8 +115,31 @@
       <button id="tb-h3" data-cmd="block.h3">标题3</button>
       <button id="tb-quote" data-cmd="block.quote">引用</button>
       <button id="tb-codeblock" data-cmd="block.codeblock">代码块</button>
+      <button id="tb-table" data-cmd="insert.table">表格</button>
+      <button id="tb-image" data-cmd="insert.image">图片</button>
     </div>
     <div class="group">
+      <select id="tb-font" title="字体">
+        <option value="">字体</option>
+        <option value="宋体">宋体</option>
+        <option value="黑体">黑体</option>
+        <option value="微软雅黑">微软雅黑</option>
+        <option value="仿宋">仿宋</option>
+        <option value="楷体">楷体</option>
+        <option value="SimSun">SimSun</option>
+        <option value="Georgia">Georgia</option>
+        <option value="Consolas">Consolas</option>
+      </select>
+      <select id="tb-size" title="字号 (pt)">
+        <option value="">字号</option>
+        <option value="9">9</option><option value="10.5">10.5</option>
+        <option value="12">12</option><option value="14">14</option>
+        <option value="16">16</option><option value="18">18</option>
+        <option value="22">22</option><option value="26">26</option>
+        <option value="36">36</option>
+      </select>
+      <input type="color" id="tb-color" title="文字颜色" value="#000000" />
+      <input type="color" id="tb-highlight" title="高亮" value="#ffff00" />
       <button id="tb-strong" data-cmd="format.strong"><b>B</b></button>
       <button id="tb-em" data-cmd="format.em"><i>I</i></button>
       <button id="tb-underline" data-cmd="format.underline"><u>U</u></button>
@@ -125,7 +148,17 @@
       <button id="tb-link" data-cmd="format.link">链接</button>
     </div>
     <div class="group">
+      <button id="tb-align-left" data-cmd="para.alignLeft" title="左对齐">⯇</button>
+      <button id="tb-align-center" data-cmd="para.alignCenter" title="居中">≡</button>
+      <button id="tb-align-right" data-cmd="para.alignRight" title="右对齐">⯈</button>
+      <button id="tb-align-justify" data-cmd="para.alignJustify" title="两端对齐">☰</button>
+      <button id="tb-indent-more" data-cmd="para.indentMore" title="增加缩进">⇥</button>
+      <button id="tb-indent-less" data-cmd="para.indentLess" title="减少缩进">⇤</button>
+      <button id="tb-clear-format" data-cmd="format.clear" title="清除格式">⌫格式</button>
+    </div>
+    <div class="group">
       <button id="tb-math" data-cmd="insert.math">∑ 数学</button>
+      <button id="tb-rule" data-cmd="insert.rule">分隔线</button>
       <button id="tb-undo" data-cmd="edit.undo">撤销</button>
       <button id="tb-redo" data-cmd="edit.redo">重做</button>
     </div>

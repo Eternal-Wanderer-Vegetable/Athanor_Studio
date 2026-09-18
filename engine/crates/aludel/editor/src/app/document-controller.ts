@@ -262,6 +262,7 @@ export class DocumentController {
     const snapshot = view.state.doc;
     const epoch = s.epoch;
     const sessionId = s.sessionId;
+    const capturedGeneration = s.editGeneration;
     const body = {
       pm_doc: snapshot.toJSON(),
       message: (document.getElementById("message") as HTMLInputElement | null)?.value.trim() || undefined,
@@ -290,13 +291,18 @@ export class DocumentController {
       }
       if (epoch !== this.store.currentEpoch()) return; // 过期响应丢弃
       if (result.ok === false) throw new Error(result.error ?? "保存被拒绝");
-      this.baseline = snapshot;
+      // Only the captured snapshot is acknowledged. Input entered while the
+      // dialog/request was in flight remains dirty and will be queued below.
+      if (this.view?.state.doc.eq(snapshot) && this.store.state.editGeneration === capturedGeneration) {
+        this.baseline = snapshot;
+      }
       this.store.saveSucceeded(
         result.fingerprint ?? null,
         result.revision ?? null,
         result.path !== undefined ? result.path : undefined,
       );
       this.recomputeDirty();
+      if (this.store.state.editGeneration !== capturedGeneration) this.store.state.saveQueued = true;
       // 落链元数据刷新（不重建 view，保护光标）
       const rel = result.relocate;
       const relText = rel
@@ -331,17 +337,27 @@ export class DocumentController {
     const target = await this.gateway.pickSaveAs(this.store.state.displayName);
     if (!target) return;
     const s = this.store.state;
+    const snapshot = view.state.doc;
+    const capturedGeneration = s.editGeneration;
     const body = {
-      pm_doc: view.state.doc.toJSON(),
+      pm_doc: snapshot.toJSON(),
       message: undefined,
       author_id: "local",
     };
     const apply = (result: SaveResult) => {
       if (result.session_id) this.store.state.sessionId = result.session_id;
       const doc = result.doc ?? result;
-      this.baseline = view.state.doc;
+      if (this.view?.state.doc.eq(snapshot) && this.store.state.editGeneration === capturedGeneration) {
+        this.baseline = snapshot;
+      }
       this.store.saveSucceeded(doc.fingerprint ?? null, doc.revision ?? null, target);
       this.recomputeDirty();
+      if (this.store.state.editGeneration !== capturedGeneration) {
+        this.store.state.savedGeneration = capturedGeneration;
+        this.store.state.saveState = "idle";
+        this.store.state.saveQueued = false;
+        this.store.state.dirty = true;
+      }
       this.hooks.onMessage(`已另存为 ${target}`, true);
       this.hooks.onStateChange();
     };
