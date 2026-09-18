@@ -375,7 +375,12 @@ function refreshUI(): void {
     const el = document.querySelector<HTMLElement>(`[data-cmd="${cmd.id}"]`);
     if (el instanceof HTMLButtonElement) {
       el.disabled = !cmd.enabled(c);
-      if (cmd.active) el.classList.toggle("active", cmd.active());
+      if (cmd.active) {
+        const on = cmd.active();
+        el.classList.toggle("active", on);
+        // 切换态按钮的 a11y 语义（E6）：aria-pressed 与视觉态同步
+        el.setAttribute("aria-pressed", on ? "true" : "false");
+      }
     }
   }
   const s = ctl.store.state;

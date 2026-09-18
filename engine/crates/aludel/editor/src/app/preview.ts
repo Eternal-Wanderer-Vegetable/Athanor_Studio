@@ -79,6 +79,9 @@ export class PreviewSurface {
   private printBtn: HTMLButtonElement | null = null;
   private pagedReady = false;
   private readonly timeoutMs: number;
+  /** 打开代际：close/重开递增，迟到的异步结果作废（取消旧布局任务）。 */
+  private openSeq = 0;
+  private restoreFocus: HTMLElement | null = null;
 
   constructor(timeoutMs = DEFAULT_PAGED_TIMEOUT_MS) {
     this.timeoutMs = timeoutMs;
@@ -87,8 +90,14 @@ export class PreviewSurface {
   /** 打开预览浮层：载入 HTML → 等分页 → 展示页数与 LayoutIndex。 */
   async open(result: PreviewResult): Promise<PreviewOutcome> {
     this.close(); // 幂等：重开先清场
+    const seq = ++this.openSeq;
+    const stale = () => seq !== this.openSeq;
+    this.restoreFocus = document.activeElement as HTMLElement | null;
     const overlay = document.createElement("div");
     overlay.className = "az-preview-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", "打印预览");
     overlay.innerHTML = `
       <div class="az-preview-bar">
         <span class="az-preview-status">分页中…</span>
@@ -109,8 +118,10 @@ export class PreviewSurface {
     const stage = overlay.querySelector(".az-preview-stage")!;
     const iframe = document.createElement("iframe");
     iframe.className = "az-preview-frame";
+    iframe.title = "打印预览";
     stage.appendChild(iframe);
     this.iframe = iframe;
+    (overlay.querySelector(".az-preview-close") as HTMLElement | null)?.focus();
 
     const snap = result.snapshot;
     const hashShort = snap.content_hash.slice(0, 12);
@@ -120,6 +131,7 @@ export class PreviewSurface {
       const win = iframe.contentWindow;
       if (!win) throw new Error("预览窗口不可用");
       await waitPagedDone(win, this.timeoutMs);
+      if (stale()) return outcome; // 关闭/重开后迟到的分页完成不入局
       this.pagedReady = true;
       const doc = iframe.contentDocument;
       if (doc) {
@@ -130,6 +142,7 @@ export class PreviewSurface {
         );
       }
     } catch {
+      if (stale()) return outcome;
       // 分页不可用：未分页回退呈现（print_html 不含 Paged 增量，
       // 同一份印刷管线产物，DOM 未被部分分页污染）。
       iframe.srcdoc = result.print_html;
@@ -155,11 +168,16 @@ export class PreviewSurface {
   }
 
   close(): void {
+    this.openSeq += 1; // 在途分页结果作废
     this.overlay?.remove();
     this.overlay = null;
     this.iframe = null;
     this.statusEl = null;
     this.printBtn = null;
     this.pagedReady = false;
+    // 焦点还给打开前的元素（模态关闭的键盘可达性）
+    const restore = this.restoreFocus;
+    this.restoreFocus = null;
+    restore?.focus?.();
   }
 }

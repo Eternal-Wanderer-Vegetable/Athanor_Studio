@@ -47,6 +47,7 @@ export interface ControllerHooks {
 }
 
 const RECOVERY_DEBOUNCE_MS = 2_000;
+const STATS_DEBOUNCE_MS = 200;
 /** 客户端预检的资产字节上限（服务端同值；超限在 stage 前给出可读提示）。 */
 const MAX_ASSET_BYTES = 32 * 1024 * 1024;
 
@@ -64,6 +65,7 @@ export class DocumentController {
   composing = false;
   private recoveryTimer: ReturnType<typeof setTimeout> | null = null;
   private recoveryGeneration = 0;
+  private statsTimer: ReturnType<typeof setTimeout> | null = null;
   /** 最近一次 Ctrl/Alt/Shift+V 决定的粘贴模式（ClipboardEvent 无修饰键）。 */
   private pendingPasteMode: PasteMode | null = null;
 
@@ -339,11 +341,17 @@ export class DocumentController {
 
   // ---------------------------------------------------------------- 刷新
 
-  /** 派生 UI：大纲/字数/标题/命令态。IME 组合期间只刷状态条。 */
+  /** 派生 UI：大纲/字数/标题/命令态。IME 组合期间只刷状态条。
+   *  字数统计为 O(doc) 且对连续输入无时效价值：延迟 200ms 归并，
+   *  每次新编辑取消上一笔待算（长文档"取消旧布局任务"的最小实现）。 */
   refreshDerivedUI(): void {
     if (!this.composing && this.view) {
       this.hooks.onOutline(collectHeadings(this.view.state.doc));
-      this.hooks.onStats(countChars(this.view.state.doc));
+      const doc = this.view.state.doc;
+      if (this.statsTimer) clearTimeout(this.statsTimer);
+      this.statsTimer = setTimeout(() => {
+        if (this.view?.state.doc === doc) this.hooks.onStats(countChars(doc));
+      }, STATS_DEBOUNCE_MS);
     }
     this.hooks.onStateChange();
   }
