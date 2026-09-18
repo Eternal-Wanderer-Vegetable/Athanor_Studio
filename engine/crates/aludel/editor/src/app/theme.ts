@@ -13,6 +13,8 @@ export interface PageTheme {
 }
 
 export const DEFAULT_PAGE_THEME: PageTheme = {
+  schema_version: "1.0",
+  theme: "default",
   pageSize: "A4",
   orientation: "portrait",
   margins: { top: 22, right: 18, bottom: 22, left: 18 },

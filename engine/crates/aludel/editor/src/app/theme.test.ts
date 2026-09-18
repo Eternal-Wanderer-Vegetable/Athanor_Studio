@@ -4,7 +4,7 @@ import { DEFAULT_PAGE_THEME, normalizePageTheme, pageThemesEqual } from "./theme
 describe("page theme", () => {
   it("normalizes missing and unsafe values to stable defaults", () => {
     expect(normalizePageTheme({ orientation: "other", margins: { top: 100 } })).toMatchObject({
-      ...DEFAULT_PAGE_THEME, margins: { ...DEFAULT_PAGE_THEME.margins, top: 60 },
+      pageSize: "A4", orientation: "portrait", margins: { top: 60 },
     });
   });
 
