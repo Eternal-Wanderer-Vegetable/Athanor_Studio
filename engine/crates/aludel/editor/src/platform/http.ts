@@ -52,11 +52,11 @@ export class HttpGateway implements DocumentGateway {
 
   async openInitial(): Promise<OpenResult> {
     const resp = await fetch("/api/doc");
+    const data = (await resp.json()) as Record<string, unknown>;
     if (!resp.ok) {
-      const err = (await resp.json()) as { error?: string };
-      throw new Error(err.error ?? `HTTP ${resp.status}`);
+      throw new Error(String(data["error"] ?? `HTTP ${resp.status}`));
     }
-    return { sessionId: this.sessionId, doc: (await resp.json()) as OpenResult["doc"] };
+    return { sessionId: this.sessionId, doc: data as unknown as OpenResult["doc"] };
   }
 
   async saveDocument(_sessionId: string, body: Record<string, unknown>): Promise<SaveResult> {
