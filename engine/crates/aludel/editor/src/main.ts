@@ -18,12 +18,14 @@
 
 import { TextSelection } from "prosemirror-state";
 import { toggleMark, wrapIn, setBlockType } from "prosemirror-commands";
+import { wrapInList, liftListItem } from "prosemirror-schema-list";
 import { undo, redo } from "prosemirror-history";
 import "prosemirror-view/style/prosemirror.css";
 import { schema } from "./schema";
 import { DocumentController, errText } from "./app/document-controller";
 import { CommandRegistry, type CommandContext } from "./app/command-registry";
 import { findAll, selectMatch, replaceCurrent, replaceAll } from "./app/find";
+import { addTableRow, deleteTableRow, addTableColumn, deleteTableColumn, toggleHeaderRow } from "./app/table-commands";
 import {
   setParagraphFormat,
   setCharacterFormat,
@@ -174,6 +176,9 @@ reg("block.h2", "标题 2", () => pmRun(setBlockType(schema.nodes.heading, { lev
 reg("block.h3", "标题 3", () => pmRun(setBlockType(schema.nodes.heading, { level: 3 }) as never));
 reg("block.quote", "引用", () => pmRun(wrapIn(schema.nodes.quote) as never));
 reg("block.codeblock", "代码块", () => pmRun(setBlockType(schema.nodes.code_block, { language: null }) as never));
+reg("list.bullet", "项目符号", () => pmRun(wrapInList(schema.nodes.list, { style: "bullet", start: null }) as never));
+reg("list.ordered", "编号", () => pmRun(wrapInList(schema.nodes.list, { style: "ordered", start: 1 }) as never));
+reg("list.outdent", "减少列表缩进", () => pmRun(liftListItem(schema.nodes.list_item) as never));
 function newId(prefix: "blk" | "row" | "cel" | "col"): string {
   // Azodoc IDs use Crockford ULID, so newly inserted nodes are valid before
   // the first save (the Rust converter can still repair imported IDs).
@@ -217,6 +222,11 @@ reg("insert.rule", "分隔线", () => {
   const v = ctl.view;
   if (v) v.dispatch(v.state.tr.replaceSelectionWith(schema.nodes.horizontal_rule.create()));
 });
+reg("table.rowAdd", "增加表格行", () => pmRun(addTableRow as never));
+reg("table.rowDelete", "删除表格行", () => pmRun(deleteTableRow as never));
+reg("table.colAdd", "增加表格列", () => pmRun(addTableColumn as never));
+reg("table.colDelete", "删除表格列", () => pmRun(deleteTableColumn as never));
+reg("table.header", "切换表头", () => pmRun(toggleHeaderRow as never));
 reg("insert.math", "数学块", () => {
   const v = ctl.view;
   if (!v) return;
@@ -362,6 +372,10 @@ async function boot(): Promise<void> {
     ["tb-codeblock", "block.codeblock"],
     ["tb-table", "insert.table"],
     ["tb-image", "insert.image"],
+    ["tb-row-add", "table.rowAdd"],
+    ["tb-col-add", "table.colAdd"],
+    ["tb-row-del", "table.rowDelete"],
+    ["tb-col-del", "table.colDelete"],
     ["tb-math", "insert.math"],
     ["tb-rule", "insert.rule"],
     ["tb-strong", "format.strong"],

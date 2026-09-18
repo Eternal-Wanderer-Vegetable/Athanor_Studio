@@ -20,6 +20,7 @@ import { EditorState, Transaction } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 import { baseKeymap } from "prosemirror-commands";
 import { keymap } from "prosemirror-keymap";
+import { liftListItem, sinkListItem, splitListItem } from "prosemirror-schema-list";
 import { history, undo, redo } from "prosemirror-history";
 import type { Node as PMNode } from "prosemirror-model";
 import { schema } from "../schema";
@@ -78,6 +79,11 @@ export class DocumentController {
       state: EditorState.create({
         doc,
         plugins: [
+          keymap({
+            Enter: splitListItem(schema.nodes.list_item),
+            Tab: sinkListItem(schema.nodes.list_item),
+            "Shift-Tab": liftListItem(schema.nodes.list_item),
+          }),
           keymap({ "Mod-z": undo, "Shift-Mod-z": redo, "Mod-y": redo }),
           keymap(baseKeymap),
           history(),
