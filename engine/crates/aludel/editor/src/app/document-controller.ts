@@ -426,7 +426,10 @@ export class DocumentController {
   // ---------------------------------------------------------------- 任务
 
   /** 导出/出版固定为“先保存当前快照，再对该版本跑任务”。 */
-  async runJob(kind: "import" | "export" | "publish"): Promise<void> {
+  async runJob(
+    kind: "import" | "export" | "publish",
+    format: "markdown" | "html" | "text" | "docx" = "markdown",
+  ): Promise<void> {
     if (!this.gateway.desktop) {
       this.hooks.onMessage("浏览器模式不支持后台任务。", false);
       return;
@@ -471,14 +474,16 @@ export class DocumentController {
       this.hooks.onMessage("请先保存文档再导出。", false);
       return;
     }
-    const output = await this.gateway.pickSaveAs(
-      kind === "publish" ? `${this.store.state.displayName}.pdf` : `${this.store.state.displayName}.md`,
-    );
+    const extension =
+      kind === "publish"
+        ? "pdf"
+        : ({ markdown: "md", html: "html", text: "txt", docx: "docx" } as const)[format];
+    const output = await this.gateway.pickSaveAs(`${this.store.state.displayName}.${extension}`);
     if (!output) return;
     const epoch = this.store.currentEpoch();
     const request: JobRequest =
       kind === "export"
-        ? { kind, input, output, format: "markdown" }
+        ? { kind, input, output, format }
         : { kind, input, output, noPaged: false };
     try {
       const jobId = await this.gateway.runJob(request, s.sessionId || null, (snap) =>

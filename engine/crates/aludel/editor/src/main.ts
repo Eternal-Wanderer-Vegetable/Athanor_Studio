@@ -253,6 +253,9 @@ reg("insert.math", "数学块", () => {
 });
 reg("job.import", "导入…", () => ctl.runJob("import"), { desktopOnly: true, needsDoc: false });
 reg("job.export", "导出 Markdown…", () => ctl.runJob("export"), { desktopOnly: true });
+reg("job.exportHtml", "导出 HTML…", () => ctl.runJob("export", "html"), { desktopOnly: true });
+reg("job.exportText", "导出纯文本…", () => ctl.runJob("export", "text"), { desktopOnly: true });
+reg("job.exportDocx", "导出 Word 文档…", () => ctl.runJob("export", "docx"), { desktopOnly: true });
 reg("job.publish", "导出 PDF…", () => ctl.runJob("publish"), { desktopOnly: true });
 reg("job.cancel", "取消任务", () => ctl.cancelJob(), { desktopOnly: true });
 reg("view.zoomIn", "放大", () => setZoom(zoom + 0.1));
