@@ -102,6 +102,7 @@ pub fn print_html_to_pdf_paged(
     pdf_path: &Path,
     timeout: Duration,
 ) -> Result<PagedRenderInfo, PdfError> {
+    let _print_guard = crate::browser_print_lock();
     let deadline = std::time::Instant::now() + timeout;
 
     let mut proc = cdp::launch_cdp(browser)?;

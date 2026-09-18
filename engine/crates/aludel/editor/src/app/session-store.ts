@@ -95,6 +95,13 @@ export class SessionStore {
     return epoch;
   }
 
+  /** 关闭当前会话并使所有在途异步响应失效。 */
+  close(): number {
+    const epoch = this.state.epoch + 1;
+    this.state = { ...initialState(), epoch };
+    return epoch;
+  }
+
   /** 内容级编辑（控制器确认 doc 结构变化后调用）。 */
   markEdited(): void {
     this.state.editGeneration += 1;

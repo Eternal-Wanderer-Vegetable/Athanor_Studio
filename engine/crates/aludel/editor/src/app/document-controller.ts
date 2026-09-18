@@ -341,7 +341,8 @@ export class DocumentController {
     this.view?.destroy();
     this.view = null;
     this.baseline = null;
-    this.store.state = { ...this.store.state, sessionId: "", path: null };
+    // 关闭文档也必须使保存/任务回调失效；否则晚到的任务结果可能重新打开已关闭文档。
+    this.store.close();
     this.refreshDerivedUI();
   }
 

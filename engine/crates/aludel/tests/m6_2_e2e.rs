@@ -568,6 +568,62 @@ fn save_migrates_data_uri_and_external_urls() {
 }
 
 #[test]
+fn repeated_asset_references_are_registered_once() {
+    let (_dir, doc) = make_doc("asset-dedup");
+    let app = App::new(doc.clone());
+    let staged = app
+        .stage_asset("pic.png", "image/png", b"same-bytes".to_vec())
+        .unwrap();
+    let url = staged["url"].as_str().unwrap().to_string();
+    let mut pm = pm_with_image(&url);
+    let mut second = pm["content"][0].clone();
+    second["attrs"]["id"] = json!("blk_00000000000000000000000001");
+    pm["content"].as_array_mut().unwrap().push(second);
+
+    let resp = app.save(&json!({ "pm_doc": pm })).expect("保存应成功");
+    assert_eq!(resp["assets"]["staged"].as_u64(), Some(1));
+    let mut c = read_container(&doc);
+    let registry: Value =
+        serde_json::from_slice(&c.read_entry("assets/registry.json").unwrap()).unwrap();
+    let entries = registry["assets"].as_array().unwrap();
+    assert_eq!(
+        entries.iter().filter(|e| e["id"] == staged["id"]).count(),
+        1,
+        "同一 asset:// 引用只能登记一条"
+    );
+    assert_eq!(athanor_cli::verify_cmd::run(&doc), 0);
+}
+
+#[test]
+fn data_uri_non_image_mime_is_not_migrated() {
+    let (_dir, doc) = make_doc("data-mime");
+    let app = App::new(doc.clone());
+    let data = {
+        use base64::Engine as _;
+        format!(
+            "data:text/html;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(b"<script>alert(1)</script>")
+        )
+    };
+    let pm = pm_with_image(&data);
+    let resp = app.save(&json!({ "pm_doc": pm })).expect("保存应成功");
+    assert_eq!(resp["assets"]["migrated"].as_u64(), Some(0));
+    assert!(resp["assets"]["warnings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|w| w.as_str().unwrap_or("").contains("类型不允许")));
+    let mut c = read_container(&doc);
+    let registry: Value =
+        serde_json::from_slice(&c.read_entry("assets/registry.json").unwrap()).unwrap();
+    assert!(!registry["assets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|e| e["mime"] == "text/html"));
+}
+
+#[test]
 fn dangling_and_bad_asset_refs_warn_but_save() {
     let (_dir, doc) = make_doc("dangling");
     let app = App::new(doc.clone());
