@@ -236,7 +236,7 @@ fn print_plain(
 ) -> Result<(Vec<u8>, Option<u64>), String> {
     azodoc_pdf::print_html_to_pdf(browser, html_path, pdf_path, azodoc_pdf::DEFAULT_TIMEOUT)
         .map_err(|e| e.friendly())?;
-    let pdf_bytes = std::fs::read(pdf_path).map_err(|e| format!("PDF 读取失败: {e}"))?;
+    let pdf_bytes = azodoc_pdf::read_pdf_output(pdf_path).map_err(|e| e.friendly())?;
     if !pdf_bytes.starts_with(b"%PDF") {
         return Err("产物不是有效 PDF".to_string());
     }

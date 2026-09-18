@@ -34,9 +34,21 @@ pub use paged::{
 use std::io::Write as IoWrite;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(180);
+const OUTPUT_SETTLE_TIMEOUT: Duration = Duration::from_secs(10);
+
+static BROWSER_PRINT_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+/// Windows Edge 直印与 CDP 打印不能并发运行，否则偶发退出成功但不落 PDF。
+pub(crate) fn browser_print_lock() -> MutexGuard<'static, ()> {
+    BROWSER_PRINT_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum PdfError {
@@ -201,6 +213,18 @@ pub fn print_html_to_pdf(
     pdf_path: &Path,
     timeout: Duration,
 ) -> Result<(), PdfError> {
+    let _print_guard = browser_print_lock();
+    // Windows 上若已有同一浏览器的用户会话，CLI 调用可能被转发后提前退出。
+    // 给每次直印独立 profile，避免复用已有实例导致 PDF 没有落到目标路径。
+    let profile = std::env::temp_dir().join(format!(
+        "athanor-print-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    std::fs::create_dir_all(&profile)?;
     let mut child = Command::new(&browser.path)
         .args([
             "--headless",
@@ -209,6 +233,7 @@ pub fn print_html_to_pdf(
             "--disable-extensions",
             "--no-pdf-header-footer",
         ])
+        .arg(format!("--user-data-dir={}", profile.display()))
         .arg(format!("--print-to-pdf={}", pdf_path.display()))
         .arg(html_path)
         .stdin(Stdio::null())
@@ -225,6 +250,7 @@ pub fn print_html_to_pdf(
                 if Instant::now() >= deadline {
                     let _ = child.kill();
                     let _ = child.wait();
+                    let _ = std::fs::remove_dir_all(&profile);
                     return Err(PdfError::Timeout {
                         timeout_secs: timeout.as_secs(),
                     });
@@ -246,15 +272,40 @@ pub fn print_html_to_pdf(
             .rev()
             .collect::<Vec<_>>()
             .join(" | ");
+        let _ = std::fs::remove_dir_all(&profile);
         return Err(PdfError::PrintFailed {
             exit: status.code(),
             stderr: tail,
         });
     }
+    let output_deadline = Instant::now() + OUTPUT_SETTLE_TIMEOUT;
+    while !pdf_path.is_file() && Instant::now() < output_deadline {
+        std::thread::sleep(Duration::from_millis(50));
+    }
     if !pdf_path.is_file() {
+        let _ = std::fs::remove_dir_all(&profile);
         return Err(PdfError::BadOutput("浏览器未产出 PDF 文件".to_string()));
     }
+    let _ = std::fs::remove_dir_all(&profile);
     Ok(())
+}
+
+/// 读取浏览器刚写出的 PDF；Windows 上短暂的文件替换/杀毒扫描期间重试。
+pub fn read_pdf_output(path: &Path) -> Result<Vec<u8>, PdfError> {
+    let deadline = Instant::now() + OUTPUT_SETTLE_TIMEOUT;
+    let mut last = None;
+    while Instant::now() < deadline {
+        match std::fs::read(path) {
+            Ok(bytes) if !bytes.is_empty() => return Ok(bytes),
+            Ok(_) => last = Some("文件为空".to_string()),
+            Err(e) => last = Some(e.to_string()),
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    Err(PdfError::BadOutput(format!(
+        "PDF 读取失败: {}",
+        last.unwrap_or_else(|| "文件不存在".to_string())
+    )))
 }
 
 /// 最佳努力统计 PDF 页数（扫描页树 /Count；扫描不到时返回 None）。

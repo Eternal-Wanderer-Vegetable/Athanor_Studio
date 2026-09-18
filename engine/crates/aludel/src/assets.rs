@@ -23,7 +23,7 @@
 //!   并报告，绝不产生悬空 `asset://`（§4.2.3）。
 //! - 孤儿：已登记但未被引用的条目原样保留（§4.4，不自动回收）。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
 use azodoc_container::Container;
@@ -46,6 +46,10 @@ const ALLOWED_MIME: &[&str] = &[
     "image/x-icon",
     "image/bmp",
 ];
+
+fn is_allowed_mime(mime: &str) -> bool {
+    ALLOWED_MIME.contains(&mime)
+}
 
 /// 一条暂存资产（未提交进容器）。
 pub struct StagedAsset {
@@ -93,7 +97,7 @@ pub fn stage(
     bytes: Vec<u8>,
 ) -> Result<(String, String), ApiError> {
     let mime = mime.trim().to_ascii_lowercase();
-    if !ALLOWED_MIME.contains(&mime.as_str()) {
+    if !is_allowed_mime(&mime) {
         return Err(ApiError::BadRequest(format!(
             "不支持的资产类型 `{mime}`（仅接受位图：{}）",
             ALLOWED_MIME.join(", ")
@@ -204,6 +208,8 @@ pub fn persist_assets(
     let staged_map = staged.lock().unwrap_or_else(|e| e.into_inner());
     // 同一引用串在一次保存内映射到同一资产（重复粘贴只登记一次）。
     let mut ref_to_id: HashMap<String, String> = HashMap::new();
+    // 本次保存中新建的资产 ID。正文可能多次引用同一图片，registry 仍只能有一条。
+    let mut pending_ids: HashSet<String> = HashSet::new();
     let mut new_entries: Vec<Value> = Vec::new();
     let mut new_files: Vec<(String, Vec<u8>)> = Vec::new();
     let mut touched = false;
@@ -212,7 +218,7 @@ pub fn persist_assets(
         let current = loc.as_str().unwrap_or_default().to_string();
         if let Some(rest) = current.strip_prefix("asset://") {
             let id = rest.split('/').next().unwrap_or("").to_string();
-            if registered.iter().any(|r| r == &id) {
+            if registered.iter().any(|r| r == &id) || pending_ids.contains(&id) {
                 continue; // 已登记，原样
             }
             match staged_map.get(&id) {
@@ -231,6 +237,7 @@ pub fn persist_assets(
                     new_files.push((path, a.bytes.clone()));
                     out.persisted_ids.push(id.clone());
                     out.staged += 1;
+                    pending_ids.insert(id);
                     touched = true;
                 }
                 None => {
@@ -240,28 +247,28 @@ pub fn persist_assets(
             }
         } else if current.starts_with("data:") {
             match decode_data_uri(&current) {
-                Some((mime, bytes))
-                    if !mime.starts_with("image/svg") && bytes.len() <= MAX_ASSET_BYTES =>
-                {
+                Some((mime, bytes)) if is_allowed_mime(&mime) && bytes.len() <= MAX_ASSET_BYTES => {
                     let id = ref_to_id
                         .entry(current.clone())
                         .or_insert_with(|| AzodocId::generate(IdKind::As).as_str().to_string())
                         .clone();
                     let filename = format!("pasted.{}", mime_ext(&mime));
-                    new_entries.push(json!({
-                        "id": id,
-                        "filename": filename,
-                        "mime": mime,
-                        "relationship": "inline",
-                        "storage": "embedded",
-                        "path": format!("assets/{id}/{filename}"),
-                        "size": bytes.len(),
-                        "sha256": doc_store::sha256_hex(&bytes),
-                    }));
-                    new_files.push((format!("assets/{id}/{filename}"), bytes));
+                    if pending_ids.insert(id.clone()) {
+                        new_entries.push(json!({
+                            "id": id,
+                            "filename": filename,
+                            "mime": mime,
+                            "relationship": "inline",
+                            "storage": "embedded",
+                            "path": format!("assets/{id}/{filename}"),
+                            "size": bytes.len(),
+                            "sha256": doc_store::sha256_hex(&bytes),
+                        }));
+                        new_files.push((format!("assets/{id}/{filename}"), bytes));
+                        out.migrated += 1;
+                        touched = true;
+                    }
                     *loc = json!(format!("asset://{id}/{filename}"));
-                    out.migrated += 1;
-                    touched = true;
                 }
                 Some((_, bytes)) => out.warnings.push(format!(
                     "data: 资产超限或类型不允许（{} B），保留原引用",
@@ -285,19 +292,21 @@ pub fn persist_assets(
                     .next()
                     .unwrap_or("asset"),
             );
-            new_entries.push(json!({
-                "id": id,
-                "filename": filename,
-                "mime": azodoc_convert::guess_mime(&filename),
-                "relationship": "inline",
-                "storage": "external",
-                "url": current,
-                "size": 0,
-                "sha256": doc_store::sha256_hex(current.as_bytes()),
-            }));
+            if pending_ids.insert(id.clone()) {
+                new_entries.push(json!({
+                    "id": id,
+                    "filename": filename,
+                    "mime": azodoc_convert::guess_mime(&filename),
+                    "relationship": "inline",
+                    "storage": "external",
+                    "url": current,
+                    "size": 0,
+                    "sha256": doc_store::sha256_hex(current.as_bytes()),
+                }));
+                out.external += 1;
+                touched = true;
+            }
             *loc = json!(format!("asset://{id}/{filename}"));
-            out.external += 1;
-            touched = true;
         }
         // 其他 scheme（blob: 等）不属 §4.2 迁移范围，原样保留
     }

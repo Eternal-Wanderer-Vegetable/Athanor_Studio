@@ -91,6 +91,19 @@ describe("SessionStore", () => {
     expect(captured).toBe(e1);
     expect(s.currentEpoch()).not.toBe(captured);
   });
+
+  it("close invalidates in-flight saves and jobs", () => {
+    const s = new SessionStore();
+    const e1 = s.open({ sessionId: "a", path: "/a", revision: null, fingerprint: null });
+    s.requestSave();
+    s.setActiveJob(42);
+    const e2 = s.close();
+    expect(e2).toBe(e1 + 1);
+    expect(s.state.sessionId).toBe("");
+    expect(s.state.path).toBeNull();
+    expect(s.state.saveState).toBe("idle");
+    expect(s.state.activeJob).toBeNull();
+  });
 });
 
 describe("initialState", () => {
