@@ -280,9 +280,24 @@ fn table_ast(node: &Value, ctx: &mut ExportCtx, log: &mut LossLog) -> Vec<Value>
     }
 
     let align_default = json!({"t": "AlignDefault"});
-    let colspecs: Vec<Value> = cols
+    // Pandoc ColWidth = 相对文本宽度的分数；Prima width 是任意相对单位，
+    // 统一除以总和归一（全缺/全零 → 0.0 = ColWidthDefault 等宽）。
+    let widths: Vec<f64> = cols
         .iter()
-        .map(|_| json!([align_default, {"t": "ColWidth", "c": 0.0}]))
+        .map(|c| {
+            c.get("width")
+                .and_then(Value::as_f64)
+                .unwrap_or(0.0)
+                .max(0.0)
+        })
+        .collect();
+    let total: f64 = widths.iter().sum();
+    let colspecs: Vec<Value> = widths
+        .iter()
+        .map(|w| {
+            let frac = if total > 0.0 { w / total } else { 0.0 };
+            json!([align_default, {"t": "ColWidth", "c": frac}])
+        })
         .collect();
 
     let row_ast = |row: &Value, ctx: &mut ExportCtx, log: &mut LossLog| -> Value {

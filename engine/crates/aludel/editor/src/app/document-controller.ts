@@ -21,6 +21,7 @@ import { EditorView } from "prosemirror-view";
 import { baseKeymap } from "prosemirror-commands";
 import { keymap } from "prosemirror-keymap";
 import { liftListItem, sinkListItem, splitListItem } from "prosemirror-schema-list";
+import { columnResizing, tableEditing } from "prosemirror-tables";
 import { history, undo, redo } from "prosemirror-history";
 import type { Node as PMNode } from "prosemirror-model";
 import { schema, setAssetResolver } from "../schema";
@@ -149,6 +150,12 @@ export class DocumentController {
       state: EditorState.create({
         doc,
         plugins: [
+          // 表格编辑栈先于自定义 keymap：tableEditing 自带 CellSelection
+          // 与 Tab/Shift-Tab 格间导航；columnResizing 写 cell colwidth
+          // （保存时归并进 columns[].width，spec §6.5）。不装 fixTables 自动
+          // 修复——不规则表只诊断，修复走显式 table.fix 命令。
+          columnResizing({ cellMinWidth: 24 }),
+          tableEditing(),
           keymap({
             Enter: splitListItem(schema.nodes.list_item),
             Tab: sinkListItem(schema.nodes.list_item),

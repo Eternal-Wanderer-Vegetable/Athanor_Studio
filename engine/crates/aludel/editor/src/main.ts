@@ -21,11 +21,24 @@ import { toggleMark, wrapIn, setBlockType } from "prosemirror-commands";
 import { wrapInList, liftListItem } from "prosemirror-schema-list";
 import { undo, redo } from "prosemirror-history";
 import "prosemirror-view/style/prosemirror.css";
+import "prosemirror-tables/style/tables.css";
 import { schema } from "./schema";
 import { DocumentController, errText } from "./app/document-controller";
 import { CommandRegistry, type CommandContext } from "./app/command-registry";
 import { findAll, selectMatch, replaceCurrent, replaceAll } from "./app/find";
-import { addTableRow, deleteTableRow, addTableColumn, deleteTableColumn, toggleHeaderRow, mergeTableCells, splitTableCell } from "./app/table-commands";
+import {
+  addTableRow,
+  addTableRowBefore,
+  deleteTableRow,
+  addTableColumn,
+  addTableColumnBefore,
+  deleteTableColumn,
+  deleteWholeTable,
+  fixTable,
+  toggleHeaderRow,
+  mergeTableCells,
+  splitTableCell,
+} from "./app/table-commands";
 import {
   setParagraphFormat,
   setCharacterFormat,
@@ -235,13 +248,17 @@ reg("insert.rule", "分隔线", () => {
   const v = ctl.view;
   if (v) v.dispatch(v.state.tr.replaceSelectionWith(schema.nodes.horizontal_rule.create()));
 });
+reg("table.rowAddBefore", "在上方增加行", () => pmRun(addTableRowBefore as never));
 reg("table.rowAdd", "增加表格行", () => pmRun(addTableRow as never));
 reg("table.rowDelete", "删除表格行", () => pmRun(deleteTableRow as never));
+reg("table.colAddBefore", "在左侧增加列", () => pmRun(addTableColumnBefore as never));
 reg("table.colAdd", "增加表格列", () => pmRun(addTableColumn as never));
 reg("table.colDelete", "删除表格列", () => pmRun(deleteTableColumn as never));
+reg("table.delete", "删除整个表格", () => pmRun(deleteWholeTable as never));
 reg("table.header", "切换表头", () => pmRun(toggleHeaderRow as never));
-reg("table.merge", "合并右侧单元格", () => pmRun(mergeTableCells as never));
+reg("table.merge", "合并单元格", () => pmRun(mergeTableCells as never));
 reg("table.split", "拆分单元格", () => pmRun(splitTableCell as never));
+reg("table.fix", "修复表格结构", () => pmRun(fixTable as never));
 reg("insert.math", "数学块", () => {
   const v = ctl.view;
   if (!v) return;

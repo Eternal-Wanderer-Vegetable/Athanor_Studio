@@ -1155,6 +1155,22 @@ fn map_table(tbl: &El, ctx: &mut BodyCtx) -> Value {
         .child("w", "tblGrid")
         .map(|g| g.children.iter().filter(|c| c.is("w", "gridCol")).count())
         .unwrap_or(0);
+    // 列宽：gridCol@w:w（twips，1/20 pt）原样作相对单位（spec §6.5 仅比例有效）
+    let grid_widths: Vec<i64> = tbl
+        .child("w", "tblGrid")
+        .map(|g| {
+            g.children
+                .iter()
+                .filter(|c| c.is("w", "gridCol"))
+                .map(|c| {
+                    c.attr("w:w")
+                        .and_then(|v| v.parse::<i64>().ok())
+                        .unwrap_or(0)
+                        .max(0)
+                })
+                .collect()
+        })
+        .unwrap_or_default();
 
     // 表样式登记
     if let Some(sid) = tbl
@@ -1280,8 +1296,17 @@ fn map_table(tbl: &El, ctx: &mut BodyCtx) -> Value {
     let header_row = row_headers.first().copied().unwrap_or(false);
     let n_cols = grid_cols.max(occupied.iter().map(|r| r.len()).max().unwrap_or(0));
     let mut columns: Vec<Value> = Vec::new();
-    for _ in 0..n_cols {
-        columns.push(json!({"id": ctx.job.idgen.uid("col"), "name": ""}));
+    for i in 0..n_cols {
+        let mut col = json!({"id": ctx.job.idgen.uid("col"), "name": ""});
+        match grid_widths.get(i).copied() {
+            Some(w) if w > 0 => {
+                col.as_object_mut()
+                    .expect("object")
+                    .insert("width".into(), json!(w));
+            }
+            _ => {}
+        }
+        columns.push(col);
     }
 
     let mut out_rows: Vec<Value> = Vec::new();
@@ -1325,11 +1350,15 @@ fn map_table(tbl: &El, ctx: &mut BodyCtx) -> Value {
         out_rows.push(json!({"id": ctx.job.idgen.uid("row"), "cells": cells_out}));
     }
 
-    // header_row → columns[].name 取首行文本
+    // header_row → columns[].name 取首行文本；首行 cells 补 role:"header"
+    // （spec §6.5：header_row 与 role 正交，tblHeader 同时声明两者）
     if header_row {
-        if let Some(first) = out_rows.first() {
-            if let Some(cells) = first.get("cells").and_then(Value::as_array) {
-                for (i, cell) in cells.iter().enumerate() {
+        if let Some(first) = out_rows.first_mut() {
+            if let Some(cells) = first.get_mut("cells").and_then(Value::as_array_mut) {
+                for (i, cell) in cells.iter_mut().enumerate() {
+                    cell.as_object_mut()
+                        .expect("object")
+                        .insert("role".into(), json!("header"));
                     let mut name = String::new();
                     if let Some(children) = cell.get("children").and_then(Value::as_array) {
                         for ch in children {

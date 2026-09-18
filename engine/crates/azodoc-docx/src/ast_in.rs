@@ -275,8 +275,21 @@ fn table_from(node: &Value, ctx: &mut ImportCtx) -> Value {
     let colspecs = c.get(2).and_then(Value::as_array);
     let n_cols = colspecs.map(Vec::len).unwrap_or(0);
     let mut columns = Vec::new();
-    for _ in 0..n_cols {
-        columns.push(json!({"id": ctx.job.idgen.uid("col"), "name": ""}));
+    for i in 0..n_cols {
+        // ColWidth 分数 → Prima 整数相对单位（×1000 取整；0/缺省 = 等宽不写字段）
+        let frac = colspecs
+            .and_then(|cs| cs.get(i))
+            .and_then(|spec| spec.get(1))
+            .and_then(|cw| cw.get("c"))
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0);
+        let mut col = json!({"id": ctx.job.idgen.uid("col"), "name": ""});
+        if frac > 0.0 {
+            col.as_object_mut()
+                .unwrap()
+                .insert("width".to_string(), json!((frac * 1000.0).round() as i64));
+        }
+        columns.push(col);
     }
 
     if let Some(caption) = c.get(1).and_then(Value::as_array) {
@@ -301,7 +314,16 @@ fn table_from(node: &Value, ctx: &mut ImportCtx) -> Value {
         if !head_rows.is_empty() {
             header_row = true;
             for r in head_rows {
-                rows.push(row_from(r, ctx));
+                let mut row = row_from(r, ctx);
+                // TableHead 行 → 单元格 role:"header"（spec §6.5 正交语义）
+                if let Some(cells) = row.get_mut("cells").and_then(Value::as_array_mut) {
+                    for cell in cells {
+                        cell.as_object_mut()
+                            .unwrap()
+                            .insert("role".to_string(), json!("header"));
+                    }
+                }
+                rows.push(row);
             }
         }
     }

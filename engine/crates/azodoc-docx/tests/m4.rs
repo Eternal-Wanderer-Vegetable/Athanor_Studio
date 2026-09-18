@@ -63,7 +63,7 @@ fn ast_fixture_maps_to_prima() {
             {"t": "Table", "c": [
                 ["", [], []],
                 [null, []],
-                [[{"t": "AlignDefault"}, {"t": "ColWidth", "c": 0.0}]],
+                [[{"t": "AlignDefault"}, {"t": "ColWidth", "c": 0.5}]],
                 [["", [], []], [
                     [["", [], []], [
                         [["", [], []], {"t": "AlignLeft"}, 1, 1, [
@@ -96,6 +96,17 @@ fn ast_fixture_maps_to_prima() {
     assert!(s.contains("footnote_ref") && s.contains("footnote"));
     assert!(s.contains("\"start\":3"), "有序列表 start 应保留");
     assert!(s.contains("\"colSpan\":2"), "合并单元格应保留");
+    // E2：TableHead → header_row + 首行 cell role:"header"；
+    // ColWidth 0.5 → columns[].width 500（分数 ×1000 取整）
+    assert!(
+        s.contains("\"header_row\":true"),
+        "TableHead 应产生 header_row"
+    );
+    assert!(
+        s.contains("\"role\":\"header\""),
+        "首行 cell 应有 role:header"
+    );
+    assert!(s.contains("\"width\":500"), "ColWidth 0.5 → width 500");
     // RawBlock → preserved_raw
     let e = out
         .log

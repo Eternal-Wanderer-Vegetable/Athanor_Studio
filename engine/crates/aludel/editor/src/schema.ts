@@ -122,6 +122,24 @@ function captionText(caption: unknown): string {
 
 // ---------------------------------------------------------------- toDOM
 
+/** 官方 setCellAttrs 等价物：colwidth → data-colwidth + style.width。 */
+function cellAttrs(node: PMNode): Record<string, unknown> {
+  const extra: Record<string, unknown> = {};
+  const colwidth = node.attrs.colwidth as number[] | null | undefined;
+  const widths = colwidth && colwidth.filter((w) => typeof w === "number");
+  if (widths && widths.length > 0) {
+    extra["data-colwidth"] = colwidth!.join(",");
+    if (colwidth!.length === 1 && widths.length === 1) {
+      extra.style = `width: ${widths[0]}px`;
+    }
+  }
+  return {
+    colspan: node.attrs.colspan ?? undefined,
+    rowspan: node.attrs.rowspan ?? undefined,
+    ...extra,
+  };
+}
+
 const nodeToDOM: Record<string, (node: PMNode) => AnySpec> = {
   section: () => ["div", { class: "az-section" }, 0],
   paragraph: (node) => {
@@ -151,16 +169,12 @@ const nodeToDOM: Record<string, (node: PMNode) => AnySpec> = {
     node.attrs.language ? { "data-language": node.attrs.language } : {},
     ["code", 0],
   ],
-  table: () => ["table", 0],
+  // 表格系：对齐 prosemirror-tables 官方 DOM 契约（tbody 包装、
+  // data-colwidth 列宽、th/td 角色），TableMap/列宽拖拽依赖此结构。
+  table: () => ["table", ["tbody", 0]],
   table_row: () => ["tr", 0],
-  table_cell: (node) => [
-    "td",
-    {
-      colspan: node.attrs.colSpan ?? undefined,
-      rowspan: node.attrs.rowSpan ?? undefined,
-    },
-    0,
-  ],
+  table_cell: (node) => ["td", cellAttrs(node), 0],
+  table_header: (node) => ["th", cellAttrs(node), 0],
   figure: (node) => {
     const src = assetUrl(node.attrs.asset);
     const img = src
@@ -252,6 +266,26 @@ const markToDOM: Record<string, (mark: PMNode) => AnySpec> = {
 // ---------------------------------------------------------------- parseDOM
 // 剪贴板粘贴的最小恢复面；无法建模的内容自然退化为纯文本（损失由保存侧报告）。
 
+/** 官方 getCellAttrs 等价物：td/th → colspan/rowspan/colwidth（小写 PM 名）。
+ *  显式转 number——PM 不强制 attr 类型，字符串会让 Prima 侧 as_i64 丢失跨度。 */
+function cellParseAttrs(dom: string | Node): Record<string, unknown> {
+  const el = dom as HTMLElement;
+  const int = (name: string): number | undefined => {
+    const v = el.getAttribute(name);
+    return v && /^\d+$/.test(v) ? Number(v) : undefined;
+  };
+  const widthAttr = el.getAttribute("data-colwidth");
+  const widths =
+    widthAttr && /^\d+(,\d+)*$/.test(widthAttr)
+      ? widthAttr.split(",").map(Number)
+      : [el.offsetWidth];
+  return {
+    colspan: int("colspan"),
+    rowspan: int("rowspan"),
+    colwidth: widths,
+  };
+}
+
 const nodeParseDOM: Record<string, AnySpec[]> = {
   section: [{ tag: "div[data-az-section]" }],
   paragraph: [
@@ -301,9 +335,35 @@ const nodeParseDOM: Record<string, AnySpec[]> = {
       },
     },
   ],
-  table: [{ tag: "table" }],
+  table: [
+    {
+      tag: "table",
+      getAttrs: (dom: string | Node) => {
+        // 粘贴的外部 HTML：首行全 th → header_row（本侧 td/th 已能无损
+        // 区分，这里只为外部表格补角色元数据）。
+        const firstRow = (dom as HTMLElement).querySelector("tr");
+        const cells = firstRow ? Array.from(firstRow.children) : [];
+        return cells.length > 0 && cells.every((c) => c.tagName === "TH")
+          ? { header_row: true }
+          : {};
+      },
+    },
+  ],
   table_row: [{ tag: "tr" }],
-  table_cell: [{ tag: "td" }, { tag: "th" }],
+  // th 走 table_header（下方 parseDOM 注册顺序保证优先级），td 走 table_cell。
+  // getCellAttrs：colspan/rowspan 原生属性 + data-colwidth/width 样式读回。
+  table_cell: [
+    {
+      tag: "td",
+      getAttrs: cellParseAttrs,
+    },
+  ],
+  table_header: [
+    {
+      tag: "th",
+      getAttrs: cellParseAttrs,
+    },
+  ],
   horizontal_rule: [{ tag: "hr" }],
   hard_break: [{ tag: "br" }],
 };

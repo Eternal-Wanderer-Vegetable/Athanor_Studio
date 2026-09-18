@@ -331,7 +331,7 @@ fn table_gridspan_vmerge_and_header() {
     let docx = pkg(
         r#"<w:body><w:tbl>
 <w:tblPr><w:tblStyle w:val="TableGrid"/></w:tblPr>
-<w:tblGrid><w:gridCol/><w:gridCol/><w:gridCol/></w:tblGrid>
+<w:tblGrid><w:gridCol w:w="5760"/><w:gridCol w:w="2880"/><w:gridCol w:w="1440"/></w:tblGrid>
 <w:tr><w:trPr><w:tblHeader/></w:trPr>
   <w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p><w:r><w:t>宽头</w:t></w:r></w:p></w:tc>
   <w:tc><w:p><w:r><w:t>第三列</w:t></w:r></w:p></w:tc>
@@ -354,12 +354,20 @@ fn table_gridspan_vmerge_and_header() {
     assert_eq!(tbl["header_row"], true);
     assert_eq!(tbl["columns"].as_array().unwrap().len(), 3);
     assert_eq!(tbl["columns"][0]["name"], "宽头");
+    // E2：gridCol@w:w → columns[].width（twips 原样，相对单位）
+    assert_eq!(tbl["columns"][0]["width"], 5760);
+    assert_eq!(tbl["columns"][1]["width"], 2880);
+    assert_eq!(tbl["columns"][2]["width"], 1440);
     let rows = tbl["rows"].as_array().unwrap();
     assert_eq!(rows.len(), 3);
-    // 表头行：第一格 colSpan=2
+    // 表头行：第一格 colSpan=2；tblHeader → 首行 cells role:"header"
     let head_cells = rows[0]["cells"].as_array().unwrap();
     assert_eq!(head_cells[0]["colSpan"], 2);
     assert_eq!(head_cells.len(), 2, "gridSpan 合并后首行 2 格");
+    assert_eq!(head_cells[0]["role"], "header");
+    assert_eq!(head_cells[1]["role"], "header");
+    // 数据行 cell 无 role（body 默认不写字段）
+    assert!(rows[1]["cells"][0].get("role").is_none());
     // vMerge：续格不产出，起点 rowSpan=2
     let row1_cells = rows[1]["cells"].as_array().unwrap();
     assert_eq!(row1_cells[0]["rowSpan"], 2);

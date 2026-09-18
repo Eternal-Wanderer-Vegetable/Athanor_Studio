@@ -24,7 +24,7 @@
 
 use serde_json::{json, Map, Value};
 
-use crate::mapping::{self, AttrDef, AttrSpec, MarkDef, NodeDef};
+use crate::mapping::{self, pm_attr_name, AttrDef, AttrSpec, MarkDef, NodeDef};
 use crate::PmError;
 
 fn bad(msg: impl std::fmt::Display) -> PmError {
@@ -51,6 +51,8 @@ fn field_to_attr(v: Option<&Value>, spec: AttrSpec) -> Value {
             .and_then(Value::as_i64)
             .map(|i| json!(i))
             .unwrap_or(Value::Null),
+        // 跨度：缺失即 1（与 schema default 对齐；无效值回退 1）
+        AttrSpec::Span => json!(v.and_then(Value::as_i64).unwrap_or(1).max(1)),
         AttrSpec::OptBool => v
             .and_then(Value::as_bool)
             .map(Value::Bool)
@@ -193,7 +195,11 @@ fn block_attrs(def: &NodeDef, obj: &Map<String, Value>) -> Map<String, Value> {
         if a.name == "extra" {
             continue;
         }
-        attrs.insert(a.name.to_string(), field_to_attr(obj.get(a.name), a.spec));
+        // PM 键名（colSpan→colspan 等）；known/extra 仍按 Prima 名计算
+        attrs.insert(
+            pm_attr_name(a.name).to_string(),
+            field_to_attr(obj.get(a.name), a.spec),
+        );
     }
     let extra = extra_of(obj, &known);
     attrs.insert(
@@ -315,6 +321,12 @@ fn table_to_pm(obj: &Map<String, Value>) -> Result<Value, PmError> {
     let def = node_def_of("table")?;
     let row_def = mapping::node_by_pm("table_row").expect("table_row 定义存在");
     let cell_def = mapping::node_by_pm("table_cell").expect("table_cell 定义存在");
+    let header_def = mapping::node_by_pm("table_header").expect("table_header 定义存在");
+    // columns[].width（相对单位）→ 每列 colwidth（PM 像素宽数组的单元素）
+    let col_widths: Vec<i64> = as_array_or_empty(obj.get("columns"))
+        .iter()
+        .map(|c| c.get("width").and_then(Value::as_i64).unwrap_or(0))
+        .collect();
     let mut content = Vec::new();
     for row in as_array_or_empty(obj.get("rows")) {
         let ro = row
@@ -330,9 +342,28 @@ fn table_to_pm(obj: &Map<String, Value>) -> Result<Value, PmError> {
             for c in children {
                 cell_content.push(block_to_pm(c)?);
             }
+            let is_header = co.get("role").and_then(Value::as_str) == Some("header");
+            let cell_def = if is_header { header_def } else { cell_def };
+            let mut attrs = block_attrs(cell_def, co);
+            // colwidth 分发：按 column + colSpan 取覆盖列的首个宽度
+            let col = co.get("column").and_then(Value::as_i64).unwrap_or(0).max(0) as usize;
+            let span = co
+                .get("colSpan")
+                .and_then(Value::as_i64)
+                .unwrap_or(1)
+                .max(1) as usize;
+            let widths: Vec<Value> = (0..span)
+                .map(|w| match col_widths.get(col + w).copied().unwrap_or(0) {
+                    v if v > 0 => json!(v),
+                    _ => Value::Null,
+                })
+                .collect();
+            if widths.iter().any(|v| !v.is_null()) {
+                attrs.insert("colwidth".into(), Value::Array(widths));
+            }
             row_content.push(pm_node(
                 cell_def.pm_name,
-                block_attrs(cell_def, co),
+                attrs,
                 cell_content,
                 None,
                 Vec::new(),

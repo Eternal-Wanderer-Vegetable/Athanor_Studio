@@ -164,7 +164,7 @@ fn full_fixture() -> Value {
                     {"id": cel1, "column": 0, "children": [
                         {"type": "paragraph", "id": nid("blk"), "content": [{"type": "text", "text": "甲"}]}
                     ]},
-                    {"id": cel2, "column": 1, "colSpan": 1, "children": [
+                    {"id": cel2, "column": 1, "children": [
                         {"type": "paragraph", "id": nid("blk"), "content": [{"type": "text", "text": "乙"}]}
                     ]}
                 ]},
@@ -228,6 +228,78 @@ fn roundtrip_is_idempotent() {
 fn empty_document_roundtrip() {
     let empty = json!({"schema_version": "1.0", "content": []});
     assert_eq!(roundtrip(&empty), empty);
+}
+
+// ---------------------------------------------------------------- E2 表格
+
+#[test]
+fn table_header_and_colwidth_roundtrip() {
+    // cell role="header" ↔ PM table_header 节点；columns[].width ↔ cell colwidth
+    let mut nid = make_nid();
+    let f = json!({"schema_version": "1.0", "content": [
+        {"type": "table", "id": nid("blk"), "header_row": true, "columns": [
+            {"id": nid("col"), "width": 2},
+            {"id": nid("col"), "width": 1}
+        ], "rows": [
+            {"id": nid("row"), "cells": [
+                {"id": nid("cel"), "column": 0, "role": "header", "children": [
+                    {"type": "paragraph", "id": nid("blk"), "content": [{"type": "text", "text": "名"}]}
+                ]},
+                {"id": nid("cel"), "column": 1, "role": "header", "children": [
+                    {"type": "paragraph", "id": nid("blk"), "content": [{"type": "text", "text": "值"}]}
+                ]}
+            ]},
+            {"id": nid("row"), "cells": [
+                {"id": nid("cel"), "column": 0, "children": [
+                    {"type": "paragraph", "id": nid("blk"), "content": [{"type": "text", "text": "a"}]}
+                ]},
+                {"id": nid("cel"), "column": 1, "children": [
+                    {"type": "paragraph", "id": nid("blk"), "content": [{"type": "text", "text": "b"}]}
+                ]}
+            ]}
+        ]}
+    ]});
+
+    // 正向：role="header" → table_header 节点；width → colwidth
+    let pm = azodoc_pm::content_file_to_pm(&f).unwrap();
+    let table = &pm["content"][0];
+    let row0 = &table["content"][0];
+    assert_eq!(
+        row0["content"][0]["type"], "table_header",
+        "首行 cell → table_header"
+    );
+    assert_eq!(row0["content"][0]["attrs"]["colwidth"], json!([2]));
+    assert_eq!(row0["content"][1]["attrs"]["colwidth"], json!([1]));
+    let row1 = &table["content"][1];
+    assert_eq!(row1["content"][0]["type"], "table_cell");
+    assert_eq!(row1["content"][0]["attrs"]["colwidth"], json!([2]));
+
+    // 往返恒等（colwidth 归并回 width；role 由节点类型重写）
+    assert_eq!(roundtrip(&f), f, "表头/列宽往返必须恒等");
+}
+
+#[test]
+fn table_legacy_prima_attr_names_accepted() {
+    // 旧快照里 PM attrs 键是 Prima 名（colSpan/rowSpan）——to_prima 兼容读取
+    let mut nid = make_nid();
+    let pm_doc = json!({"type": "doc", "attrs": {"schema_version": "1.0", "extra": null}, "content": [
+        {"type": "table", "attrs": {"id": nid("blk"), "columns": [{"id": nid("col")}], "extra": null}, "content": [
+            {"type": "table_row", "attrs": {"id": nid("row"), "extra": null}, "content": [
+                {"type": "table_cell", "attrs": {
+                    "id": nid("cel"), "column": 0,
+                    "colSpan": 2, "extra": null
+                }, "content": [
+                    {"type": "paragraph", "attrs": {"id": nid("blk"), "extra": null}, "content": [
+                        {"type": "text", "text": "x"}
+                    ]}
+                ]}
+            ]}
+        ]}
+    ]});
+    let mut no_alloc = |_k: IdKind| -> String { panic!("不应补发 ID") };
+    let back = azodoc_pm::pm_to_content_file(&pm_doc, &mut no_alloc).unwrap();
+    let cell = &back.content_file["content"][0]["rows"][0]["cells"][0];
+    assert_eq!(cell["colSpan"], 2, "旧键名 colSpan 必须被识别");
 }
 
 // ---------------------------------------------------------------- 规范化恒等

@@ -662,3 +662,93 @@ fn document_session_facade_reuses_core_operations() {
     assert_eq!(session.doc_path().as_deref(), Some(doc.as_path()));
     assert_eq!(session.verify().unwrap()["ok"], true);
 }
+
+/// E2: 表格编辑元数据（table_header 节点、colwidth、columns[]）经
+/// 保存管线落 Prima 并在重开后完整恢复。
+#[test]
+fn table_roundtrip_through_save_reopen() {
+    let (_dir, doc) = make_doc("table");
+    let app = App::new(doc.clone());
+    let resp = app
+        .save(&json!({
+            "pm_doc": {
+                "type": "doc", "attrs": {"schema_version": "1.0", "extra": null},
+                "content": [{
+                    "type": "table", "attrs": {
+                        "id": "blk_00000000000000000000000050", "header_row": true,
+                        "columns": [
+                            {"id": "col_00000000000000000000000051"},
+                            {"id": "col_00000000000000000000000052"}
+                        ],
+                        "extra": null
+                    },
+                    "content": [
+                        {"type": "table_row", "attrs": {"id": "row_00000000000000000000000053", "extra": null}, "content": [
+                            {"type": "table_header", "attrs": {
+                                "id": "cel_00000000000000000000000054", "column": 0,
+                                "colspan": 1, "rowspan": 1, "colwidth": [300], "extra": null
+                            }, "content": [
+                                {"type": "paragraph", "attrs": {"id": "blk_00000000000000000000000055", "extra": null},
+                                 "content": [{"type": "text", "text": "名"}]}
+                            ]},
+                            {"type": "table_header", "attrs": {
+                                "id": "cel_00000000000000000000000056", "column": 1,
+                                "colspan": 1, "rowspan": 1, "colwidth": [150], "extra": null
+                            }, "content": [
+                                {"type": "paragraph", "attrs": {"id": "blk_00000000000000000000000057", "extra": null},
+                                 "content": [{"type": "text", "text": "值"}]}
+                            ]}
+                        ]},
+                        {"type": "table_row", "attrs": {"id": "row_00000000000000000000000058", "extra": null}, "content": [
+                            {"type": "table_cell", "attrs": {
+                                "id": "cel_00000000000000000000000059", "column": 0,
+                                "colspan": 1, "rowspan": 1, "colwidth": [300], "extra": null
+                            }, "content": [
+                                {"type": "paragraph", "attrs": {"id": "blk_00000000000000000000000060", "extra": null},
+                                 "content": [{"type": "text", "text": "甲"}]}
+                            ]},
+                            {"type": "table_cell", "attrs": {
+                                "id": "cel_00000000000000000000000061", "column": 1,
+                                "colspan": 1, "rowspan": 1, "colwidth": [150], "extra": null
+                            }, "content": [
+                                {"type": "paragraph", "attrs": {"id": "blk_00000000000000000000000062", "extra": null},
+                                 "content": [{"type": "text", "text": "乙"}]}
+                            ]}
+                        ]}
+                    ]
+                }]
+            },
+            "author_id": "table-tester"
+        }))
+        .expect("表格保存应成功");
+    assert!(resp["revision"].as_str().unwrap().starts_with("rev_"));
+
+    // 落盘 Prima：header cell role、columns[].width 归并、header_row
+    let mut c = read_container(&doc);
+    let content: Value =
+        serde_json::from_slice(&c.read_entry("document/content.json").unwrap()).unwrap();
+    drop(c);
+    let table = &content["content"][0];
+    assert_eq!(table["type"], "table");
+    assert_eq!(table["header_row"], true);
+    assert_eq!(table["columns"][0]["width"], 300, "colwidth 归并进 width");
+    assert_eq!(table["columns"][1]["width"], 150);
+    let row0 = &table["rows"][0]["cells"];
+    assert_eq!(row0[0]["role"], "header", "table_header -> role:header");
+    assert_eq!(row0[1]["role"], "header");
+    assert!(table["rows"][1]["cells"][0].get("role").is_none());
+
+    // 重开：PM 侧节点类型/列宽恢复
+    let opened = app.open().expect("重开应成功");
+    let pm_table = &opened["pm_doc"]["content"][0];
+    let pm_head = &pm_table["content"][0]["content"][0];
+    assert_eq!(
+        pm_head["type"], "table_header",
+        "role:header -> table_header"
+    );
+    assert_eq!(pm_head["attrs"]["colwidth"], json!([300]));
+    let pm_body = &pm_table["content"][1]["content"][0];
+    assert_eq!(pm_body["type"], "table_cell");
+
+    assert_eq!(athanor_cli::verify_cmd::run(&doc), 0, "verify 必须通过");
+}

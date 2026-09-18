@@ -30,7 +30,7 @@ use std::collections::HashSet;
 use azodoc_model::id::{is_valid_id, IdKind};
 use serde_json::{json, Map, Value};
 
-use crate::mapping::{self, AttrDef, AttrSpec, MarkDef};
+use crate::mapping::{self, pm_attr_name, AttrDef, AttrSpec, MarkDef};
 use crate::PmError;
 
 fn bad(msg: impl std::fmt::Display) -> PmError {
@@ -98,22 +98,6 @@ fn read_text(attrs: &Map<String, Value>, name: &str, default: &str) -> String {
         .to_string()
 }
 
-fn read_opt_text(attrs: &Map<String, Value>, name: &str) -> Option<String> {
-    attrs.get(name).and_then(Value::as_str).map(str::to_string)
-}
-
-fn read_int(attrs: &Map<String, Value>, name: &str, default: i64) -> i64 {
-    attrs.get(name).and_then(Value::as_i64).unwrap_or(default)
-}
-
-fn read_opt<T: Copy>(
-    attrs: &Map<String, Value>,
-    name: &str,
-    f: fn(&Value) -> Option<T>,
-) -> Option<T> {
-    attrs.get(name).and_then(f)
-}
-
 fn read_opt_json(attrs: &Map<String, Value>, name: &str) -> Option<Value> {
     match attrs.get(name) {
         Some(v) if !v.is_null() => Some(v.clone()),
@@ -121,33 +105,58 @@ fn read_opt_json(attrs: &Map<String, Value>, name: &str) -> Option<Value> {
     }
 }
 
+/// PM attrs 取值：PM 名优先，兼容旧快照里的 Prima 名键。
+fn attr_of<'a>(attrs: &'a Map<String, Value>, pm: &str, prima: &str) -> Option<&'a Value> {
+    attrs.get(pm).or_else(|| attrs.get(prima))
+}
+
 /// 按 attr 规格把 PM attr 值写为 Prima 字段（可选规格的 null/缺失 → 整体省略）。
+/// PM attr 名经 [`pm_attr_name`]（colSpan→colspan），Prima 键名仍是 `a.name`。
+/// 兼容读取：旧快照里 PM 键是 Prima 名（colSpan）时也能取到。
 fn push_attr_field(out: &mut Map<String, Value>, a: &AttrDef, attrs: &Map<String, Value>) {
+    let v = attr_of(attrs, pm_attr_name(a.name), a.name);
     match a.spec {
         AttrSpec::Text(d) => {
-            out.insert(a.name.to_string(), json!(read_text(attrs, a.name, d)));
+            out.insert(
+                a.name.to_string(),
+                json!(v.and_then(Value::as_str).unwrap_or(d)),
+            );
         }
         AttrSpec::Int(d) => {
-            out.insert(a.name.to_string(), json!(read_int(attrs, a.name, d)));
+            out.insert(
+                a.name.to_string(),
+                json!(v.and_then(Value::as_i64).unwrap_or(d)),
+            );
         }
         AttrSpec::OptText => {
-            if let Some(v) = read_opt_text(attrs, a.name) {
+            if let Some(v) = v.and_then(Value::as_str) {
                 out.insert(a.name.to_string(), json!(v));
             }
         }
         AttrSpec::OptInt => {
-            if let Some(v) = read_opt(attrs, a.name, Value::as_i64) {
+            if let Some(v) = v.and_then(Value::as_i64) {
                 out.insert(a.name.to_string(), json!(v));
             }
         }
+        // 跨度：1 是默认值不落字段（PM 侧 attr 恒存在且默认 1，
+        // 无法区分"显式 1"与"缺失"，规范形统一省略默认）
+        AttrSpec::Span => {
+            if let Some(v) = v.and_then(Value::as_i64) {
+                if v != 1 {
+                    out.insert(a.name.to_string(), json!(v));
+                }
+            }
+        }
         AttrSpec::OptBool => {
-            if let Some(v) = read_opt(attrs, a.name, Value::as_bool) {
+            if let Some(v) = v.and_then(Value::as_bool) {
                 out.insert(a.name.to_string(), json!(v));
             }
         }
         AttrSpec::OptJson => {
-            if let Some(v) = read_opt_json(attrs, a.name) {
-                out.insert(a.name.to_string(), v);
+            if let Some(v) = v {
+                if !v.is_null() {
+                    out.insert(a.name.to_string(), v.clone());
+                }
             }
         }
     }
@@ -228,24 +237,24 @@ fn parse_marks(node: &Map<String, Value>) -> Result<Vec<ParsedMark>, PmError> {
         let raw = as_obj_or_empty(mo.get("attrs"));
         let mut attrs = Map::new();
         for a in def.attrs {
+            let get = raw.get(pm_attr_name(a.name)).or_else(|| raw.get(a.name));
             match a.spec {
                 AttrSpec::Text(d) => {
                     attrs.insert(
                         a.name.to_string(),
-                        json!(raw.get(a.name).and_then(Value::as_str).unwrap_or(d)),
+                        json!(get.and_then(Value::as_str).unwrap_or(d)),
                     );
                 }
                 AttrSpec::Int(d) => {
                     attrs.insert(
                         a.name.to_string(),
-                        json!(raw.get(a.name).and_then(Value::as_i64).unwrap_or(d)),
+                        json!(get.and_then(Value::as_i64).unwrap_or(d)),
                     );
                 }
                 AttrSpec::OptText => {
                     attrs.insert(
                         a.name.to_string(),
-                        raw.get(a.name)
-                            .and_then(Value::as_str)
+                        get.and_then(Value::as_str)
                             .map(|s| Value::String(s.to_string()))
                             .unwrap_or(Value::Null),
                     );
@@ -253,8 +262,16 @@ fn parse_marks(node: &Map<String, Value>) -> Result<Vec<ParsedMark>, PmError> {
                 AttrSpec::OptInt => {
                     attrs.insert(
                         a.name.to_string(),
-                        raw.get(a.name)
-                            .and_then(Value::as_i64)
+                        get.and_then(Value::as_i64)
+                            .map(|i| json!(i))
+                            .unwrap_or(Value::Null),
+                    );
+                }
+                AttrSpec::Span => {
+                    // marks 侧无 Span 用法；保持与 OptInt 相同的空值语义
+                    attrs.insert(
+                        a.name.to_string(),
+                        get.and_then(Value::as_i64)
                             .map(|i| json!(i))
                             .unwrap_or(Value::Null),
                     );
@@ -262,8 +279,7 @@ fn parse_marks(node: &Map<String, Value>) -> Result<Vec<ParsedMark>, PmError> {
                 AttrSpec::OptBool => {
                     attrs.insert(
                         a.name.to_string(),
-                        raw.get(a.name)
-                            .and_then(Value::as_bool)
+                        get.and_then(Value::as_bool)
                             .map(Value::Bool)
                             .unwrap_or(Value::Null),
                     );
@@ -271,7 +287,7 @@ fn parse_marks(node: &Map<String, Value>) -> Result<Vec<ParsedMark>, PmError> {
                 AttrSpec::OptJson => {
                     attrs.insert(
                         a.name.to_string(),
-                        match raw.get(a.name) {
+                        match get {
                             Some(v) if !v.is_null() => v.clone(),
                             _ => Value::Null,
                         },
@@ -411,11 +427,16 @@ fn build_block(node: &Value, ctx: &mut Ctx) -> Result<Value, PmError> {
             out.insert("text".into(), json!(text));
         }
         "table" => {
-            push_declared_attr_fields(&mut out, &attrs, def.prima_fields, def.attrs);
             let mut rows = Vec::new();
             for row in content_children(obj) {
                 rows.push(build_table_row(row, ctx)?);
             }
+            // 列宽：PM cell colwidth（像素，prosemirror-tables 惯例）归并进
+            // columns[].width（spec §6.5 相对单位——沿用像素值，仅比例有效）；
+            // PM 侧缺 columns 或列数不足时按网格宽补齐（新列发 col_ ID）。
+            let columns = table_columns(content_children(obj), &attrs, ctx);
+            push_declared_attr_fields(&mut out, &attrs, def.prima_fields, def.attrs);
+            out.insert("columns".into(), Value::Array(columns));
             out.insert("rows".into(), Value::Array(rows));
         }
         "figure" | "image" | "horizontal_rule" | "math_block" | "embed" => {
@@ -484,16 +505,23 @@ fn build_table_cell(node: &Value, ctx: &mut Ctx) -> Result<Value, PmError> {
     let obj = node
         .as_object()
         .ok_or_else(|| bad("table_row.cells 成员必须是对象"))?;
-    if obj.get("type").and_then(Value::as_str) != Some("table_cell") {
-        return Err(bad("table_row 的直接子节点必须是 table_cell"));
-    }
-    let def = mapping::node_by_pm("table_cell").expect("table_cell 定义存在");
+    let pm_type = obj.get("type").and_then(Value::as_str).unwrap_or("");
+    let (pm_name, is_header) = match pm_type {
+        "table_cell" => ("table_cell", false),
+        "table_header" => ("table_header", true),
+        _ => return Err(bad("table_row 的直接子节点必须是 table_cell/table_header")),
+    };
+    let def = mapping::node_by_pm(pm_name).expect("table_cell/table_header 定义存在");
     let attrs = as_obj_or_empty(obj.get("attrs")).clone();
     let want_id = read_text(&attrs, "id", "");
-    let id = ctx.resolve_id(&want_id, def.id_kind.expect("table_cell 有 ID 身份"));
+    let id = ctx.resolve_id(&want_id, def.id_kind.expect("cell 有 ID 身份"));
     let mut out = Map::new();
     out.insert("id".into(), json!(id));
     push_declared_attr_fields(&mut out, &attrs, def.prima_fields, def.attrs);
+    if is_header {
+        // 节点类型即角色：th → Prima role="header"（不依赖 PM attr）
+        out.insert("role".into(), json!("header"));
+    }
     let mut children = Vec::new();
     for c in content_children(obj) {
         children.push(build_block(c, ctx)?);
@@ -501,6 +529,66 @@ fn build_table_cell(node: &Value, ctx: &mut Ctx) -> Result<Value, PmError> {
     out.insert("children".into(), Value::Array(children));
     spread_extra(&mut out, &attrs);
     Ok(Value::Object(out))
+}
+
+/// 归并 columns：只处理 PM attrs.columns 既有项（id 校验 + colwidth
+/// → width 归并）。不补列、不补 name——新列的 columns 项由编辑侧
+/// syncTable 与表格命令共同维护；列数少于网格的旧表保持原样
+/// （spec §6.5 不规则表只诊断、不静默修复）。
+fn table_columns(rows: &[Value], attrs: &Map<String, Value>, ctx: &mut Ctx) -> Vec<Value> {
+    // 网格每列第一个非空 colwidth（PM cell 像素宽 → Prima 相对单位）
+    let mut colwidth: Vec<Option<i64>> = Vec::new();
+    for row in rows {
+        let Some(cells) = row.get("content").and_then(Value::as_array) else {
+            continue;
+        };
+        let mut col = 0usize;
+        for cell in cells {
+            let co = as_obj_or_empty(cell.get("attrs"));
+            let span = co
+                .get("colspan")
+                .or_else(|| co.get("colSpan"))
+                .and_then(Value::as_i64)
+                .unwrap_or(1)
+                .max(1) as usize;
+            if let Some(widths) = co.get("colwidth").and_then(Value::as_array) {
+                for (w, v) in widths.iter().enumerate().take(span) {
+                    let idx = col + w;
+                    if colwidth.len() <= idx {
+                        colwidth.resize(idx + 1, None);
+                    }
+                    if colwidth[idx].is_none() {
+                        colwidth[idx] = v.as_i64();
+                    }
+                }
+            }
+            col += span;
+        }
+    }
+
+    let mut cols: Vec<Value> = as_array_or_empty(attrs.get("columns")).to_vec();
+    for (i, c) in cols.iter_mut().enumerate() {
+        if let Some(obj) = c.as_object_mut() {
+            let id = obj
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let id = ctx.resolve_id(&id, IdKind::Col);
+            obj.insert("id".into(), json!(id));
+            // 不补 name：缺失与空串在 Prima 语义同值，规范形不写字段
+            match colwidth.get(i).copied().flatten() {
+                Some(w) => {
+                    obj.insert("width".into(), json!(w));
+                }
+                None => {
+                    // 拖宽清掉后不落 width（缺失=等宽，spec §6.5）
+                    obj.remove("width");
+                }
+            }
+        }
+    }
+    cols
 }
 
 // ---------------------------------------------------------------- 行内
