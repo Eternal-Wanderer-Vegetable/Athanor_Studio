@@ -54,6 +54,7 @@ import { HttpGateway } from "./platform/http";
 import { $, renderOutline, renderSidebar, renderStatusBar, setMsg } from "./ui/panels";
 import { askText } from "./ui/dialogs";
 import { askPageSettings } from "./ui/page-settings";
+import { flag } from "./flags";
 
 const tauriMode = "__TAURI_INTERNALS__" in window;
 const gateway = tauriMode ? new TauriGateway() : new HttpGateway();
@@ -322,6 +323,10 @@ const previewSurface = new PreviewSurface();
 
 /** 打印预览：当前快照渲染 → 浮层分页 → 页数/快照指纹（不出版）。 */
 async function openPreview(): Promise<void> {
+  if (!flag("printPreviewV1")) {
+    setMsg("打印预览功能已关闭。", true);
+    return;
+  }
   const result = await ctl.requestPreview();
   if (!result) return;
   // 测试可注入短超时（分页回退路径）

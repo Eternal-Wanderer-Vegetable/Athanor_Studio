@@ -160,6 +160,7 @@ cd engine && cargo test    # 114 项测试；DOCX/PDF e2e 在工具缺席时自�
 - **[落地方案](design_docs/Azodoc%20v0.1%20—%20落地方案.md)** — 本仓库据此落地，附各里程碑验收记录
 - **[M6 编辑器原型计划](design_docs/M6%20—%20Aludel%20编辑器原型计划.md)** — A1 的 RFC、Prima ↔ ProseMirror 映射表与分阶段实施记录
 - **[未来计划 / 可选项](design_docs/Future%20Work%20—%20可选项与后续计划.md)** — 已存档的路线图候选（原生 OOXML 等）；A1（编辑器）、A2（AI 管线）与 B1（Paged.js 出版）已交付
+- **[编辑器指南](docs/editor.md)** — Aludel 能力清单、功能开关、迁移与兼容、DOCX 能力矩阵、故障恢复与诊断收集
 - **[spec/](spec/)** — 容器/包/模型/降级的规范文本
 
 ## 许可证

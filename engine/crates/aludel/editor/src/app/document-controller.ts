@@ -22,6 +22,7 @@ import { baseKeymap } from "prosemirror-commands";
 import { keymap } from "prosemirror-keymap";
 import { liftListItem, sinkListItem, splitListItem } from "prosemirror-schema-list";
 import { columnResizing, tableEditing } from "prosemirror-tables";
+import { flag } from "../flags";
 import { history, undo, redo } from "prosemirror-history";
 import { sanitizeHtml, sanitizeNotice, type PasteMode } from "./clipboard";
 import { mathNodeViews } from "./math-view";
@@ -119,6 +120,11 @@ export class DocumentController {
   async insertImageFile(file: File, alt?: string, dropPos?: number): Promise<void> {
     const v = this.view;
     if (!v) return;
+    if (!flag("assetRegistryV2")) {
+      // 旗标关闭：图片暂存/插入入口整体停用（旧包仍安全读取既有 asset://）
+      this.hooks.onMessage("图片资产功能已关闭。", false);
+      return;
+    }
     if (!file.type.startsWith("image/")) {
       this.hooks.onMessage("不是图片文件。", false);
       return;
@@ -165,8 +171,8 @@ export class DocumentController {
           // 与 Tab/Shift-Tab 格间导航；columnResizing 写 cell colwidth
           // （保存时归并进 columns[].width，spec §6.5）。不装 fixTables 自动
           // 修复——不规则表只诊断，修复走显式 table.fix 命令。
-          columnResizing({ cellMinWidth: 24 }),
-          tableEditing(),
+          // tableSelectionV2 关闭：退回纯文本式表格编辑（无单元格选区/列宽拖拽）
+          ...(flag("tableSelectionV2") ? [columnResizing({ cellMinWidth: 24 }), tableEditing()] : []),
           // 脚注定义被删且仍有引用 → 一次性提示（撤销可恢复；保存侧仍是硬门槛）
           footnoteDanglingPlugin((ids) => {
             this.hooks.onMessage(

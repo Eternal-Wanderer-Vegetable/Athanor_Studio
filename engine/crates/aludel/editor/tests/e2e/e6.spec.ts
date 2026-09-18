@@ -117,6 +117,25 @@ for (const scale of [1, 1.5, 2]) {
   });
 }
 
+test("feature flag: printPreviewV1=0 disables preview entry", async ({ page }) => {
+  // flags 读取发生在模块加载；route 须在 goto 之前注册
+  await page.route("**/api/doc", (route) =>
+    route.fulfill({
+      json: {
+        path: "e6.azodoc", fingerprint: "f", revision: null,
+        pm_doc: { type: "doc", content: [PARA] }, theme: null,
+        annotations: { annotations: [] }, history: [], warnings: [],
+        loss_summary: { unknown_blocks: [], detached_annotations: 0 },
+      },
+    }),
+  );
+  await page.goto("/?flags=printPreviewV1:0");
+  await expect(page.locator(".ProseMirror")).toBeVisible();
+  await page.locator("#m-preview").click();
+  await expect(page.locator("#msg")).toContainText("打印预览功能已关闭");
+  await expect(page.locator(".az-preview-overlay")).toHaveCount(0);
+});
+
 test("perf baseline: long document mount + input latency recorded", async ({ page }) => {
   // 500 段落长文档（固定夹具）
   const content = Array.from({ length: 500 }, (_, i) => ({

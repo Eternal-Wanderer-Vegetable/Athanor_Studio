@@ -78,6 +78,13 @@ jobs:
         working-directory: engine
         run: cargo test -p azodoc-model --test golden_schema
 
+  # E7 覆盖说明（无独立 job 的理由）：
+  # - asset integrity：由 `test` job 的 cargo test --workspace 覆盖
+  #   （aludel tests：资产暂存/MIME/字节上限/会话清理/离线重开）。
+  # - preview snapshot：同上（aludel e2e + athanor-cli 出版快照哈希用例）。
+  # - 浏览器交互 e2e 由 `editor` job 覆盖；真实桌面冒烟为手动 job
+  #   windows-smoke（workflow_dispatch，见下方）。
+
   test:
     name: ci (${{ matrix.os }})
     # Bound stalled runs while allowing a cold Tauri dependency build.
