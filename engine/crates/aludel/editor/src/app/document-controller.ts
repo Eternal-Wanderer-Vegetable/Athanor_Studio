@@ -28,7 +28,7 @@ import { mathNodeViews } from "./math-view";
 import { footnoteClick, footnoteDanglingPlugin } from "./footnotes";
 import type { Node as PMNode } from "prosemirror-model";
 import { schema, setAssetResolver } from "../schema";
-import type { DocumentGateway, DocResponse, JobRequest, JobSnapshot, SaveResult } from "../platform/gateway";
+import type { DocumentGateway, DocResponse, JobRequest, JobSnapshot, PreviewResult, SaveResult } from "../platform/gateway";
 import { SessionStore } from "./session-store";
 import { askText } from "../ui/dialogs";
 import { DEFAULT_PAGE_THEME, normalizePageTheme, pageThemesEqual, type PageTheme } from "./theme";
@@ -555,6 +555,30 @@ export class DocumentController {
       );
     } catch (e) {
       this.hooks.onMessage(`检查失败: ${errText(e)}`, false);
+    }
+  }
+
+  // ---------------------------------------------------------------- 预览
+
+  /** 印刷预览（E4）：当前 PM 快照 + theme 发服务端渲染，
+   *  返回 Paged.js 增强 HTML 与快照指纹（不出版、不提交）。 */
+  async requestPreview(): Promise<PreviewResult | null> {
+    const view = this.view;
+    if (!view) return null;
+    const s = this.store.state;
+    const epoch = s.epoch;
+    const body = {
+      pm_doc: view.state.doc.toJSON(),
+      theme: this.pageTheme,
+    };
+    this.hooks.onMessage("预览生成中…", true);
+    try {
+      const result = await this.gateway.renderPreview(s.sessionId, body);
+      if (epoch !== this.store.currentEpoch()) return null;
+      return result;
+    } catch (e) {
+      this.hooks.onMessage(`预览失败: ${errText(e)}`, false);
+      return null;
     }
   }
 

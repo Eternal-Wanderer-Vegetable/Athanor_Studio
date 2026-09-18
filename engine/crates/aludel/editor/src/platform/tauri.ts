@@ -22,6 +22,7 @@ import type {
   JobRequest,
   JobSnapshot,
   OpenResult,
+  PreviewResult,
   RecoveryDraft,
   SaveResult,
   StagedAssetRef,
@@ -90,6 +91,13 @@ export class TauriGateway implements DocumentGateway {
 
   async verifyDocument(sessionId: string): Promise<Record<string, unknown>> {
     return invoke<Record<string, unknown>>("verify_document", { sessionId });
+  }
+
+  async renderPreview(
+    sessionId: string,
+    body: Record<string, unknown>,
+  ): Promise<PreviewResult> {
+    return invoke<PreviewResult>("preview_document", { sessionId, body });
   }
 
   async pickOpen(): Promise<string | null> {

@@ -33,3 +33,19 @@ describe("schema asset resolution", () => {
     expect(dom[1]["src"]).toBe("data:image/png;base64,AA==");
   });
 });
+
+describe("page_break node (E4)", () => {
+  it("toDOM renders a visible divider marker", () => {
+    const node = schema.nodes.page_break.create({ id: "blk_X" });
+    const dom = (schema.nodes.page_break.spec.toDOM as (n: typeof node) => readonly unknown[])(node);
+    expect(dom[0]).toBe("div");
+    expect((dom[1] as Record<string, unknown>)["class"]).toBe("az-page-break");
+  });
+
+  it("parseDOM accepts the editor marker and print marker", () => {
+    const specs = schema.nodes.page_break.spec.parseDOM as { tag: string }[];
+    const tags = specs.map((s) => s.tag);
+    expect(tags).toContain("div.az-page-break");
+    expect(tags).toContain("div.page-break");
+  });
+});

@@ -120,6 +120,68 @@ fn ast_fixture_maps_to_prima() {
 }
 
 #[test]
+fn page_break_rawblocks_map_to_page_break() {
+    // Pandoc docx reader 把 <w:br w:type="page"/> 透传为 RawInline openxml；
+    // 自家导出写 RawBlock——两条路径都应还原为 page_break（E4）。
+    let ast = json!({
+        "pandoc-api-version": [1, 23, 1],
+        "meta": {},
+        "blocks": [
+            {"t": "Para", "c": [
+                {"t": "Str", "c": "前"},
+                {"t": "RawInline", "c": ["openxml", "<w:br w:type=\"page\"/>"]},
+                {"t": "Str", "c": "后"}
+            ]},
+            {"t": "RawBlock", "c": ["openxml", "<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>"]},
+            {"t": "Para", "c": [{"t": "Str", "c": "尾"}]}
+        ]
+    });
+    let out = import_ast(&ast);
+    let breaks: Vec<&Value> = out.content["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|b| b["type"] == "page_break")
+        .collect();
+    assert_eq!(breaks.len(), 2, "RawInline 与 RawBlock 分页都应还原");
+    assert!(out
+        .log
+        .events()
+        .iter()
+        .any(|e| e.feature == "docx_page_break"));
+}
+
+#[test]
+fn page_break_exports_as_openxml_rawblock() {
+    // 导出：page_break → RawBlock(openxml <w:br type="page">)，Word 原生分页。
+    let doc = azodoc_convert::ExportDoc {
+        content: json!({"schema_version": "1.0", "content": [
+            {"type": "paragraph", "id": "blk_00000000000000000000000070",
+             "content": [{"type": "text", "text": "a"}]},
+            {"type": "page_break", "id": "blk_00000000000000000000000071"}
+        ]}),
+        assets: vec![],
+        preserved: vec![],
+        title: None,
+        language: None,
+        document_id: None,
+    };
+    let mut log = azodoc_convert::LossLog::new();
+    let ast =
+        azodoc_docx::ast_out::prima_to_ast(&doc, std::path::Path::new("."), &mut log).unwrap();
+    let blocks = ast["blocks"].as_array().unwrap();
+    let raw = blocks
+        .iter()
+        .find(|b| b["t"] == "RawBlock")
+        .expect("page_break 应导出为 RawBlock");
+    assert_eq!(raw["c"][0], "openxml");
+    assert!(
+        raw["c"][1].as_str().unwrap().contains("w:type=\"page\""),
+        "RawBlock 应含 Word 分页标记"
+    );
+}
+
+#[test]
 fn empty_exact_map_is_handled() {
     let ast = json!({
         "pandoc-api-version": [1, 23, 1],

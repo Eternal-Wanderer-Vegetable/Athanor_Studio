@@ -28,11 +28,13 @@ use std::path::{Path, PathBuf};
 
 use crate::{die, read_container, sha256_hex};
 
-pub const PRINT_CSS_VERSION: &str = "print-css-v2";
+// v3：新增手动分页块（.page-break）规则——CSS 参与 layout_hash，必须升版本。
+pub const PRINT_CSS_VERSION: &str = "print-css-v3";
 pub const PRINT_CSS: &str = "@page { size: A4; margin: 22mm 18mm; } \
 h1,h2,h3,h4,h5,h6 { break-after: avoid; } \
 table, figure, pre { break-inside: avoid; } \
-.footnotes { break-before: page; }";
+.footnotes { break-before: page; } \
+.page-break { break-after: page; page-break-after: always; height: 0; }";
 
 const THEME_ENTRY: &str = "presentation/theme.json";
 
@@ -43,7 +45,7 @@ fn css_content(value: &str) -> String {
         .replace('\n', " ")
 }
 
-fn print_css(theme: &Value) -> (String, String) {
+pub fn print_css(theme: &Value) -> (String, String) {
     let size = match theme.get("pageSize").and_then(Value::as_str) {
         Some("Letter") => "Letter",
         _ => "A4",
@@ -78,7 +80,8 @@ fn print_css(theme: &Value) -> (String, String) {
         "@page {{ size: {size} {orientation}; margin: {top}mm {right}mm {bottom}mm {left}mm; }} \
 h1,h2,h3,h4,h5,h6 {{ break-after: avoid; }} \
 table, figure, pre {{ break-inside: avoid; }} \
-.footnotes {{ break-before: page; }}"
+.footnotes {{ break-before: page; }} \
+.page-break {{ break-after: page; page-break-after: always; height: 0; }}"
     );
     if !header.is_empty() {
         css.push_str(&format!(
@@ -112,7 +115,7 @@ fn unique_tmp(tag: &str) -> PathBuf {
 }
 
 /// 装载导出所需的资产与 preserved 载荷。
-fn load_export_doc(
+pub fn load_export_doc(
     c: &mut Container,
     title: Option<String>,
     language: Option<String>,
@@ -180,6 +183,22 @@ fn load_export_doc(
         language: language.or_else(|| m.document.language.clone()),
         document_id: Some(m.document.id.clone()),
     }
+}
+
+/// `render_print_html` 的 LayoutIndex 变体：HTML 块带 `data-block-id`，
+/// 供预览侧把分页结果映射回块（PDF 出版走未标记版本，字节不变）。
+/// 返回 (print_html, page_size)。
+pub fn render_print_html_marked(doc: &ExportDoc, theme: &Value) -> (String, String) {
+    let mut log = azodoc_convert::LossLog::new();
+    let html = azodoc_html::export_html_marked(doc, &mut log);
+    let (print_css, page_size) = print_css(theme);
+    (
+        html.replace(
+            "</head>",
+            &format!("<style id=\"azodoc-print\">{print_css}</style>\n</head>"),
+        ),
+        page_size,
+    )
 }
 
 fn collect_payload_refs(v: &Value, refs: &mut Vec<String>) {

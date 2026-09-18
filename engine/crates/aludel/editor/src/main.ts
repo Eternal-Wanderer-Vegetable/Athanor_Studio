@@ -27,6 +27,7 @@ import { DocumentController, errText } from "./app/document-controller";
 import { CommandRegistry, type CommandContext } from "./app/command-registry";
 import { findAll, selectMatch, replaceCurrent, replaceAll } from "./app/find";
 import { gotoFootnote } from "./app/footnotes";
+import { PreviewSurface } from "./app/preview";
 import {
   addTableRow,
   addTableRowBefore,
@@ -249,6 +250,22 @@ reg("insert.rule", "分隔线", () => {
   const v = ctl.view;
   if (v) v.dispatch(v.state.tr.replaceSelectionWith(schema.nodes.horizontal_rule.create()));
 });
+// 手动分页（E4）：插入 page_break 节点并补一段供光标落点（若文档末尾无后续块）。
+reg("insert.pageBreak", "分页符", () => {
+  const v = ctl.view;
+  if (!v) return;
+  const pb = schema.nodes.page_break.create({ id: newId("blk") });
+  const tr = v.state.tr.replaceSelectionWith(pb);
+  const after = tr.mapping.map(tr.selection.from);
+  const $after = tr.doc.resolve(after);
+  if ($after.nodeAfter === null || $after.nodeAfter.type.name === "page_break") {
+    tr.insert(after, schema.nodes.paragraph.create({ id: newId("blk") }));
+    tr.setSelection(TextSelection.create(tr.doc, after + 1));
+  }
+  v.dispatch(tr.scrollIntoView());
+  v.focus();
+});
+reg("view.preview", "打印预览", () => void openPreview());
 reg("table.rowAddBefore", "在上方增加行", () => pmRun(addTableRowBefore as never));
 reg("table.rowAdd", "增加表格行", () => pmRun(addTableRow as never));
 reg("table.rowDelete", "删除表格行", () => pmRun(deleteTableRow as never));
@@ -300,6 +317,33 @@ reg("job.cancel", "取消任务", () => ctl.cancelJob(), { desktopOnly: true });
 reg("view.zoomIn", "放大", () => setZoom(zoom + 0.1));
 reg("view.zoomOut", "缩小", () => setZoom(zoom - 0.1));
 reg("view.zoomReset", "100%", () => setZoom(1));
+
+const previewSurface = new PreviewSurface();
+
+/** 打印预览：当前快照渲染 → 浮层分页 → 页数/快照指纹（不出版）。 */
+async function openPreview(): Promise<void> {
+  const result = await ctl.requestPreview();
+  if (!result) return;
+  // 测试可注入短超时（分页回退路径）
+  const override = (window as unknown as { __previewTimeoutMs?: number }).__previewTimeoutMs;
+  if (typeof override === "number") {
+    const surface = new PreviewSurface(override);
+    await surface.open(result);
+    return;
+  }
+  const outcome = await previewSurface.open(result);
+  const breaks = outcome.layout?.page_breaks.length ?? 0;
+  if (outcome.fallback) {
+    setMsg("预览已打开（未分页回退）——点“打印…”走系统打印。", true);
+  } else {
+    setMsg(
+      `预览已打开：${outcome.page_count ?? "?"} 页` +
+        (breaks > 0 ? `（含 ${breaks} 处手动分页）` : "") +
+        " ——点“打印…”走系统打印。",
+      true,
+    );
+  }
+}
 
 function markActive(name: string): boolean {
   const v = ctl.view;
@@ -403,6 +447,7 @@ function onKeydown(e: KeyboardEvent): void {
     b: "format.strong",
     i: "format.em",
     u: "format.underline",
+    p: "view.preview",
   };
   const id = map[k];
   if (!id) return;
@@ -439,6 +484,7 @@ async function boot(): Promise<void> {
     ["tb-math", "insert.math"],
     ["tb-footnote", "insert.footnote"],
     ["tb-rule", "insert.rule"],
+    ["tb-page-break", "insert.pageBreak"],
     ["tb-strong", "format.strong"],
     ["tb-em", "format.em"],
     ["tb-underline", "format.underline"],
@@ -455,6 +501,7 @@ async function boot(): Promise<void> {
     ["m-export-docx", "job.exportDocx"],
     ["m-publish", "job.publish"],
     ["m-page-settings", "layout.pageSettings"],
+    ["m-preview", "view.preview"],
     ["cancel-job", "job.cancel"],
     ["sb-zoom-in", "view.zoomIn"],
     ["sb-zoom-out", "view.zoomOut"],

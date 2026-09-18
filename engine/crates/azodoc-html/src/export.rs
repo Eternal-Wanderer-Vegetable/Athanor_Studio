@@ -27,6 +27,9 @@ struct HtmlCtx<'a> {
     doc: &'a ExportDoc,
     /// (块 id, 序号, footnote 块)
     fn_defs: Vec<(String, usize, Value)>,
+    /// `export_html_marked`：为每个自带元素的块注入 `data-block-id`
+    /// （供预览 LayoutIndex 做块→页映射）。默认导出不受影响。
+    mark: bool,
 }
 
 impl<'a> HtmlCtx<'a> {
@@ -44,6 +47,16 @@ fn escape_attr(s: &str) -> String {
 
 /// 导出为自包含单文件 HTML。
 pub fn export_html(doc: &ExportDoc, log: &mut LossLog) -> String {
+    export_html_impl(doc, log, false)
+}
+
+/// `export_html` 的 LayoutIndex 变体：每个块元素带 `data-block-id`
+/// （仅给自带元素的块注入；section/footnote/降级子树不标记）。
+pub fn export_html_marked(doc: &ExportDoc, log: &mut LossLog) -> String {
+    export_html_impl(doc, log, true)
+}
+
+fn export_html_impl(doc: &ExportDoc, log: &mut LossLog, mark: bool) -> String {
     // 文档级脚注编号（按定义在文档中的出现顺序）
     let mut fn_ids: Vec<String> = Vec::new();
     collect_fn_ids(doc.content.get("content"), &mut fn_ids);
@@ -55,7 +68,7 @@ pub fn export_html(doc: &ExportDoc, log: &mut LossLog) -> String {
             (id, i + 1, def)
         })
         .collect();
-    let ctx = HtmlCtx { doc, fn_defs };
+    let ctx = HtmlCtx { doc, fn_defs, mark };
 
     let lang = doc.language.clone().unwrap_or_else(|| "zh-CN".into());
     let title = doc.title.clone().unwrap_or_else(|| "未命名文档".into());
@@ -138,9 +151,26 @@ fn find_fn_def(v: Option<&Value>, id: &str) -> Option<Value> {
     None
 }
 
+/// 给已生成的块 HTML 片段注入 `data-block-id`（插入到首个标签的 `>` 前）。
+/// 仅用于 `export_html_marked`；片段以 `<tag` 开头才生效。
+fn inject_block_id(html: String, id: &str) -> String {
+    if id.is_empty() || !html.starts_with('<') {
+        return html;
+    }
+    match html.find('>') {
+        Some(pos) => format!(
+            "{} data-block-id=\"{}\"{}",
+            &html[..pos],
+            escape_attr(id),
+            &html[pos..]
+        ),
+        None => html,
+    }
+}
+
 fn block_html(node: &Value, ctx: &HtmlCtx, log: &mut LossLog) -> String {
     let t = node.get("type").and_then(Value::as_str).unwrap_or("");
-    match t {
+    let out = match t {
         "section" => {
             // section 是组织性糖（azodoc-model.md §5）：透明展开避免双层化
             log.node_none();
@@ -301,6 +331,12 @@ fn block_html(node: &Value, ctx: &HtmlCtx, log: &mut LossLog) -> String {
             log.node_none();
             "<hr>\n".to_string()
         }
+        "page_break" => {
+            // 手动分页标记：印刷 CSS 的 .page-break { break-after: page } 生效；
+            // 布局索引也靠 data-block-id 找到它。
+            log.node_none();
+            "<div class=\"page-break\"></div>\n".to_string()
+        }
         "math_block" => {
             let latex = node.get("latex").and_then(Value::as_str).unwrap_or("");
             log.record(
@@ -414,13 +450,13 @@ fn block_html(node: &Value, ctx: &HtmlCtx, log: &mut LossLog) -> String {
                 )
             }
         }
-        _ => {
+        other => {
             log.record(
                 LossClass::Partial,
                 "html_export_fallback",
                 None,
                 "degraded",
-                t,
+                other,
                 "未知块类型按子内容降级导出".to_string(),
             );
             let mut s = String::new();
@@ -433,7 +469,33 @@ fn block_html(node: &Value, ctx: &HtmlCtx, log: &mut LossLog) -> String {
             }
             s
         }
+    };
+    // LayoutIndex 标记：只给"自带元素"的块注入 data-block-id。
+    // section（透明展开）/footnote（末尾集中）/降级子树不标记，
+    // 否则会把父 id 注进子元素标签、与块自身标记冲突。
+    if ctx.mark {
+        const MARKABLE: &[&str] = &[
+            "paragraph",
+            "heading",
+            "quote",
+            "list",
+            "code_block",
+            "table",
+            "figure",
+            "image",
+            "horizontal_rule",
+            "page_break",
+            "math_block",
+            "callout",
+            "embed",
+            "unknown",
+        ];
+        if MARKABLE.contains(&t) {
+            let id = node.get("id").and_then(Value::as_str).unwrap_or("");
+            return inject_block_id(out, id);
+        }
     }
+    out
 }
 
 fn inline_html(spans: Option<&Value>, ctx: &HtmlCtx, log: &mut LossLog) -> String {

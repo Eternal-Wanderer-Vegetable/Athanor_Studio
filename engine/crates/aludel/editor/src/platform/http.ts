@@ -21,6 +21,7 @@ import type {
   JobRequest,
   JobSnapshot,
   OpenResult,
+  PreviewResult,
   RecoveryDraft,
   SaveResult,
   StagedAssetRef,
@@ -98,6 +99,15 @@ export class HttpGateway implements DocumentGateway {
 
   async verifyDocument(): Promise<Record<string, unknown>> {
     return (await post("/api/verify", {})).data;
+  }
+
+  async renderPreview(
+    _sessionId: string,
+    body: Record<string, unknown>,
+  ): Promise<PreviewResult> {
+    const { status, data } = await post("/api/preview", body);
+    if (status !== 200) throw new Error(String(data["error"] ?? `HTTP ${status}`));
+    return data as unknown as PreviewResult;
   }
 
   async pickOpen(): Promise<string | null> {

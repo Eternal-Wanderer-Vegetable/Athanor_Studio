@@ -211,8 +211,8 @@ fn tab_break_and_page_break() {
     let out = import(&docx);
     assert!(has_feature(&out, "docx_tab"));
     assert!(has_feature(&out, "docx_page_break"));
-    let hr = first_block_of_type(&out, "horizontal_rule").expect("分页应映射为水平线");
-    assert_eq!(hr["type"], "horizontal_rule");
+    let pb = first_block_of_type(&out, "page_break").expect("分页应映射为 page_break");
+    assert_eq!(pb["type"], "page_break");
     let para_with_break = blocks(&out)
         .into_iter()
         .find(|b| {

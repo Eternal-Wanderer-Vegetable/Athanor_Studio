@@ -174,7 +174,9 @@ fn block_to_pm(n: &Value) -> Result<Value, PmError> {
         "list" => list_to_pm(obj),
         "code_block" => code_block_to_pm(obj),
         "table" => table_to_pm(obj),
-        "figure" | "image" | "horizontal_rule" | "math_block" | "embed" => atom_block_to_pm(obj, t),
+        "figure" | "image" | "horizontal_rule" | "page_break" | "math_block" | "embed" => {
+            atom_block_to_pm(obj, t)
+        }
         "unknown" => unknown_block_to_pm(obj),
         other => Err(bad(format!(
             "未知的 Prima 节点类型 `{other}`（读取方应先经 validate 盘点）"

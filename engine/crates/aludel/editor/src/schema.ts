@@ -191,6 +191,12 @@ const nodeToDOM: Record<string, (node: PMNode) => AnySpec> = {
       : ["span", { class: "az-asset-placeholder" }, `asset: ${node.attrs.asset}`];
   },
   horizontal_rule: () => ["hr"],
+  // 手动分页（E4）：编辑器里可见的分页标记；印刷/PDF 由 .page-break 规则分页。
+  page_break: () => [
+    "div",
+    { class: "az-page-break", title: "分页符：此处之后另起一页" },
+    ["hr"],
+  ],
   // 数学在编辑器内以 LaTeX 源码呈现（KaTeX 渲染属 Future Work B3）；双击可编辑
   math_block: (node) => [
     "div",
@@ -372,6 +378,7 @@ const nodeParseDOM: Record<string, AnySpec[]> = {
     },
   ],
   horizontal_rule: [{ tag: "hr" }],
+  page_break: [{ tag: "div.az-page-break" }, { tag: "div.page-break" }],
   hard_break: [{ tag: "br" }],
   // E3 粘贴恢复面：编辑器自身 toDOM 产物 + 外部网页的最小集。
   image: [

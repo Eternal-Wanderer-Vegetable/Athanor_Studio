@@ -172,6 +172,14 @@ fn block_ast(node: &Value, ctx: &mut ExportCtx, log: &mut LossLog) -> Vec<Value>
             log.node_none();
             vec![json!({"t": "HorizontalRule"})]
         }
+        "page_break" => {
+            // Word 原生分页：<w:br w:type="page"/> 独立段落（RawBlock 由
+            // Pandoc docx writer 原样写入 document.xml；原生 OOXML 导入可回读）。
+            log.node_none();
+            vec![json!({"t": "RawBlock", "c": [
+                "openxml", "<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>"
+            ]})]
+        }
         "table" => table_ast(node, ctx, log),
         "figure" | "image" => figure_ast(node, ctx, log),
         "math_block" => {

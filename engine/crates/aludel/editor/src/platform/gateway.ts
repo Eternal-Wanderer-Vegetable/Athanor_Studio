@@ -86,6 +86,21 @@ export interface RecoveryDraft {
   saved_at: string | null;
 }
 
+export interface PreviewResult {
+  /** Paged.js 增强后的印刷 HTML（polyfill 内嵌，可直接喂 iframe srcdoc）。 */
+  html: string;
+  /** 未增强版本：分页超时/失败时的未分页回退呈现。 */
+  print_html: string;
+  page_size: string;
+  snapshot: {
+    content_hash: string;
+    theme_hash: string;
+    layout_hash: string;
+    mode: string;
+    css_version: string;
+  };
+}
+
 export interface StagedAssetRef {
   /** 服务端生成的 as_ id。 */
   id: string;
@@ -117,6 +132,8 @@ export interface DocumentGateway {
   ): Promise<SaveResult>;
   closeDocument(sessionId: string): Promise<void>;
   verifyDocument(sessionId: string): Promise<Record<string, unknown>>;
+  /** 印刷预览：对当前 PM 快照产出 Paged.js 增强 HTML + 快照指纹（不出版）。 */
+  renderPreview(sessionId: string, body: Record<string, unknown>): Promise<PreviewResult>;
 
   // ---- 文件对话框（HTTP 模式抛 unsupported）----
   pickOpen(): Promise<string | null>;

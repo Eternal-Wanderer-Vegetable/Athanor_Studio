@@ -230,6 +230,21 @@ fn empty_document_roundtrip() {
     assert_eq!(roundtrip(&empty), empty);
 }
 
+// ---------------------------------------------------------------- E4 分页符
+
+#[test]
+fn page_break_roundtrip() {
+    let mut nid = make_nid();
+    let f = json!({"schema_version": "1.0", "content": [
+        {"type": "paragraph", "id": nid("blk"), "content": [{"type": "text", "text": "a"}]},
+        {"type": "page_break", "id": nid("blk")},
+        {"type": "paragraph", "id": nid("blk"), "content": [{"type": "text", "text": "b"}]}
+    ]});
+    let pm = azodoc_pm::content_file_to_pm(&f).unwrap();
+    assert_eq!(pm["content"][1]["type"], "page_break");
+    assert_eq!(roundtrip(&f), f, "page_break 往返必须恒等");
+}
+
 // ---------------------------------------------------------------- E2 表格
 
 #[test]

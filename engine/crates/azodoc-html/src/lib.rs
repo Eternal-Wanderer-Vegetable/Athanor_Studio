@@ -104,6 +104,12 @@ fn attr(h: &Handle, key: &str) -> Option<String> {
     None
 }
 
+fn has_class(h: &Handle, class: &str) -> bool {
+    attr(h, "class")
+        .map(|c| c.split_whitespace().any(|x| x == class))
+        .unwrap_or(false)
+}
+
 fn extract_title(head: &Handle, job: &mut ImportJob, log: &mut LossLog) -> Option<String> {
     let mut title = None;
     for child in head.children.borrow().iter() {
@@ -217,6 +223,11 @@ fn body_blocks(h: &Handle, job: &mut ImportJob, log: &mut LossLog) -> Vec<Value>
                 "hr" => {
                     log.node_none();
                     out.push(json!({"id": job.idgen.uid("blk"), "type": "horizontal_rule"}));
+                }
+                "div" if has_class(h, "page-break") => {
+                    // 自家导出/预览产物的分页标记（export 写 <div class="page-break">）。
+                    log.node_none();
+                    out.push(json!({"id": job.idgen.uid("blk"), "type": "page_break"}));
                 }
                 "figure" => {
                     if let Some(f) = figure_block(h, job, log) {
@@ -1038,4 +1049,4 @@ fn is_active_element(h: &Handle) -> bool {
 }
 
 mod export;
-pub use export::{converter_name, export_html};
+pub use export::{converter_name, export_html, export_html_marked};

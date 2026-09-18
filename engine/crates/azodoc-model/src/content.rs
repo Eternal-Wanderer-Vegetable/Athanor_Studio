@@ -46,6 +46,7 @@ pub const KNOWN_NODE_TYPES: &[&str] = &[
     "figure",
     "image",
     "horizontal_rule",
+    "page_break",
     "math_block",
     "callout",
     "embed",

@@ -439,7 +439,7 @@ fn build_block(node: &Value, ctx: &mut Ctx) -> Result<Value, PmError> {
             out.insert("columns".into(), Value::Array(columns));
             out.insert("rows".into(), Value::Array(rows));
         }
-        "figure" | "image" | "horizontal_rule" | "math_block" | "embed" => {
+        "figure" | "image" | "horizontal_rule" | "page_break" | "math_block" | "embed" => {
             push_declared_attr_fields(&mut out, &attrs, def.prima_fields, def.attrs);
         }
         "unknown_block" => {

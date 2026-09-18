@@ -142,6 +142,20 @@ pub fn read_asset(
     }
 }
 
+/// 印刷预览：对当前会话快照（未保存的 PM 状态也参与）产出 Paged.js 增强
+/// 的印刷 HTML + 快照指纹；不写容器、不出版（E4）。
+#[tauri::command]
+pub fn preview_document(
+    state: tauri::State<'_, SessionRegistry>,
+    session_id: String,
+    body: Value,
+) -> Result<Value, SessionError> {
+    state
+        .session(&session_id)?
+        .preview(&body)
+        .map_err(SessionError::from)
+}
+
 #[tauri::command]
 pub fn close_document(
     state: tauri::State<'_, SessionRegistry>,

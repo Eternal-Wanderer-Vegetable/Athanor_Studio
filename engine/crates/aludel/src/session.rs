@@ -106,6 +106,13 @@ impl DocumentSession {
         self.app.fingerprint()
     }
 
+    /// Render a print-preview snapshot for the supplied PM state (E4).
+    /// Shares the publish pipeline's export/print-CSS/Paged augmentation but
+    /// does not commit — preview consumes the same versioned rendering.
+    pub fn preview(&self, body: &Value) -> Result<Value, ApiError> {
+        self.app.preview(body)
+    }
+
     /// Verify the bound document using the engine verifier.
     pub fn verify(&self) -> Result<Value, ApiError> {
         self.app.verify()

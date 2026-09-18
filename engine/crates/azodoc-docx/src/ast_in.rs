@@ -99,16 +99,19 @@ pub fn map_block(node: &Value, ctx: &mut ImportCtx) -> Vec<Value> {
                 return vec![math_block_from(&m, ctx)];
             }
             let content = map_inlines(&inlines, ctx);
-            let content = take_pending(content, ctx);
+            // 段内提升出的块（DisplayMath/page_break）追加到段后，保持块层级。
+            let pending = take_pending(ctx);
             if content.is_empty() {
                 log_none(ctx);
-                Vec::new()
+                pending
             } else {
-                vec![json!({
+                let mut out = vec![json!({
                     "id": ctx.job.idgen.uid("blk"),
                     "type": "paragraph",
                     "content": content,
-                })]
+                })];
+                out.extend(pending);
+                out
             }
         }
         "BlockQuote" => {
@@ -187,6 +190,22 @@ pub fn map_block(node: &Value, ctx: &mut ImportCtx) -> Vec<Value> {
                 .unwrap_or("html")
                 .to_string();
             let text = c.get(1).and_then(Value::as_str).unwrap_or("").to_string();
+            // Word 原生分页段（<w:p><w:r><w:br w:type="page"/></w:r></w:p>）：
+            // 还原为 page_break 块而非孤立保留（自家导出可无损往返）。
+            if format == "openxml" && text.contains("w:type=\"page\"") {
+                ctx.log.record(
+                    LossClass::Partial,
+                    "docx_page_break",
+                    None,
+                    "degraded",
+                    &text,
+                    "分页符映射为 page_break 块".to_string(),
+                );
+                return vec![json!({
+                    "id": ctx.job.idgen.uid("blk"),
+                    "type": "page_break",
+                })];
+            }
             let payload_ref = ctx.job.add_preserved(&format, "raw", text.into_bytes());
             ctx.log.record(
                 LossClass::PreservedRaw,
@@ -638,11 +657,9 @@ fn flat_blocks(blocks: &[Value], ctx: &mut ImportCtx) -> Vec<Value> {
     out
 }
 
-fn take_pending(mut content: Vec<Value>, ctx: &mut ImportCtx) -> Vec<Value> {
-    if !ctx.pending_blocks.is_empty() {
-        content.append(&mut ctx.pending_blocks);
-    }
-    content
+/// 取走并清空段内提升出的待挂块（追加到当前段之后）。
+fn take_pending(ctx: &mut ImportCtx) -> Vec<Value> {
+    std::mem::take(&mut ctx.pending_blocks)
 }
 
 // ---------------------------------------------------------------- 行内映射
@@ -816,6 +833,23 @@ fn map_inline(node: &Value, ctx: &mut ImportCtx) -> Vec<Value> {
                 .unwrap_or("html")
                 .to_string();
             let text = c.get(1).and_then(Value::as_str).unwrap_or("").to_string();
+            // Word 原生分页（Pandoc docx reader 以 RawInline openxml 透传）：
+            // 提升为 page_break 块（追加到段后），不做孤立保留。
+            if format == "openxml" && text.contains("w:type=\"page\"") {
+                ctx.log.record(
+                    LossClass::Partial,
+                    "docx_page_break",
+                    None,
+                    "degraded",
+                    &text,
+                    "分页符映射为 page_break 块".to_string(),
+                );
+                ctx.pending_blocks.push(json!({
+                    "id": ctx.job.idgen.uid("blk"),
+                    "type": "page_break",
+                }));
+                return Vec::new();
+            }
             let payload_ref = ctx.job.add_preserved(&format, "raw", text.into_bytes());
             ctx.log.record(
                 LossClass::PreservedRaw,

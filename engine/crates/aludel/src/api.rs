@@ -437,6 +437,101 @@ impl App {
         Ok(resp)
     }
 
+    /// POST /api/preview —— 印刷预览快照（E4）。
+    /// 与出版共用同一条渲染管线（load_export_doc + theme→@page CSS +
+    /// augment_print_html），但走 LayoutIndex 变体：块带 `data-block-id`，
+    /// polyfill 内嵌（iframe srcdoc 无相对路径）。快照指纹 =
+    /// pm_doc+theme 规范形 + PRINT_CSS_VERSION + 分页模式，预览/PDF 可核对。
+    pub fn preview(&self, body: &Value) -> Result<Value, ApiError> {
+        let Some(pm_doc) = body.get("pm_doc") else {
+            return Err(ApiError::BadRequest("缺少 pm_doc 字段".into()));
+        };
+        if !pm_doc.is_object() {
+            return Err(ApiError::BadRequest("pm_doc 必须是 JSON 对象".into()));
+        }
+        let theme = body.get("theme").cloned();
+        if let Some(t) = &theme {
+            if !t.is_object() {
+                return Err(ApiError::BadRequest("theme 必须是 JSON 对象".into()));
+            }
+        }
+
+        let store = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let (mut c, _) = Self::open_container_from(&store)?;
+
+        // 快照内容 = 前端送来的 PM 状态（未保存改动也参与预览）；
+        // 资产清单 = 容器 registry + 会话暂存（asset://as_* 的 data: 嵌入）。
+        let mut idgen = |k: azodoc_model::id::IdKind| -> String {
+            azodoc_model::id::AzodocId::generate(k).as_str().to_string()
+        };
+        let converted = azodoc_pm::pm_to_content_file(pm_doc, &mut idgen)
+            .map_err(|e| ApiError::BadRequest(format!("ProseMirror → Prima 转换失败: {e}")))?;
+        let mut doc = athanor_cli::commands_m5::load_export_doc(&mut c, None, None);
+        doc.content = converted.content_file.clone();
+        {
+            let staged = self.staged.lock().unwrap_or_else(|e| e.into_inner());
+            for (id, a) in staged.iter() {
+                doc.assets.push(azodoc_convert::ExportAsset {
+                    id: id.clone(),
+                    filename: a.filename.clone(),
+                    mime: a.mime.clone(),
+                    storage: "embedded".into(),
+                    url: None,
+                    bytes: Some(a.bytes.clone()),
+                });
+            }
+        }
+        let theme = theme.unwrap_or_else(|| {
+            c.read_entry(THEME_ENTRY)
+                .ok()
+                .and_then(|b| serde_json::from_slice(&b).ok())
+                .unwrap_or_else(|| json!({}))
+        });
+
+        let (print_html, page_size) =
+            athanor_cli::commands_m5::render_print_html_marked(&doc, &theme);
+        let html = azodoc_pdf::augment_print_html_inline(&print_html, doc.title.as_deref());
+
+        // 快照指纹：content_file 规范形 + theme + css 版本 + 分页模式。
+        // 预览与 PDF 是同一条渲染线的两次消费——hash 必须能互核。
+        let content_bytes = {
+            let mut b = serde_json::to_vec_pretty(&converted.content_file)
+                .map_err(|e| ApiError::Doc(format!("content 序列化失败: {e}")))?;
+            b.push(b'\n');
+            b
+        };
+        let content_hash = doc_store::sha256_hex(&content_bytes);
+        let theme_hash = doc_store::sha256_hex(
+            serde_json::to_string_pretty(&theme)
+                .unwrap_or_default()
+                .as_bytes(),
+        );
+        let layout_hash = {
+            use sha2::Digest;
+            let mut h = sha2::Sha256::new();
+            h.update(content_hash.as_bytes());
+            h.update(theme_hash.as_bytes());
+            h.update(athanor_cli::commands_m5::PRINT_CSS_VERSION.as_bytes());
+            h.update(b"pagedjs");
+            let d = h.finalize();
+            d.iter().map(|b| format!("{b:02x}")).collect::<String>()
+        };
+
+        Ok(json!({
+            "html": html,
+            // 未增强版本：分页不可用时的未分页回退呈现（plain fallback）。
+            "print_html": print_html,
+            "page_size": page_size,
+            "snapshot": {
+                "content_hash": content_hash,
+                "theme_hash": theme_hash,
+                "layout_hash": layout_hash,
+                "mode": "pagedjs",
+                "css_version": athanor_cli::commands_m5::PRINT_CSS_VERSION,
+            },
+        }))
+    }
+
     /// POST /api/verify —— 复用 `athanor verify`（spec/azodoc-package.md §9 全检查）。
     pub fn verify(&self) -> Result<Value, ApiError> {
         let store = self.state.lock().unwrap_or_else(|e| e.into_inner());
@@ -532,6 +627,13 @@ pub fn route(app: &App, req: &Request) -> Response {
                     ),
                 }
             }
+            Err(e) => Response::json_with_status(
+                400,
+                &json!({ "error": format!("请求体不是合法 JSON: {e}") }),
+            ),
+        },
+        ("POST", "/api/preview") => match serde_json::from_slice::<Value>(&req.body) {
+            Ok(v) => respond(app.preview(&v)),
             Err(e) => Response::json_with_status(
                 400,
                 &json!({ "error": format!("请求体不是合法 JSON: {e}") }),

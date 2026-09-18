@@ -257,6 +257,17 @@ export const schemaSpec = {
         }
       }
     },
+    "page_break": {
+      "group": "block",
+      "attrs": {
+        "id": {
+          "default": ""
+        },
+        "extra": {
+          "default": null
+        }
+      }
+    },
     "math_block": {
       "group": "block",
       "attrs": {

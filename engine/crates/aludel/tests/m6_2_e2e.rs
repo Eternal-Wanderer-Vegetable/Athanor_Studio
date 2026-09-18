@@ -752,3 +752,62 @@ fn table_roundtrip_through_save_reopen() {
 
     assert_eq!(athanor_cli::verify_cmd::run(&doc), 0, "verify 必须通过");
 }
+
+/// E4: 手动分页符经保存管线往返；预览端点产出 Paged 增强 HTML + 快照指纹。
+#[test]
+fn page_break_and_preview_endpoints() {
+    let (_dir, doc) = make_doc("pbreak");
+    let app = App::new(doc.clone());
+    let resp = app
+        .save(&json!({
+            "pm_doc": {
+                "type": "doc", "attrs": {"schema_version": "1.0", "extra": null},
+                "content": [
+                    {"type": "paragraph", "attrs": {"id": "blk_00000000000000000000000080", "extra": null},
+                     "content": [{"type": "text", "text": "前页"}]},
+                    {"type": "page_break", "attrs": {"id": "blk_00000000000000000000000081", "extra": null}},
+                    {"type": "paragraph", "attrs": {"id": "blk_00000000000000000000000082", "extra": null},
+                     "content": [{"type": "text", "text": "后页"}]}
+                ]
+            },
+            "author_id": "pbreak-tester"
+        }))
+        .expect("page_break 保存应成功");
+    assert!(resp["revision"].as_str().unwrap().starts_with("rev_"));
+
+    // 落盘 Prima：page_break 块类型
+    let mut c = read_container(&doc);
+    let content: Value =
+        serde_json::from_slice(&c.read_entry("document/content.json").unwrap()).unwrap();
+    drop(c);
+    assert_eq!(content["content"][1]["type"], "page_break");
+
+    // 重开：PM 侧恢复 page_break 节点
+    let opened = app.open().expect("重开应成功");
+    assert_eq!(opened["pm_doc"]["content"][1]["type"], "page_break");
+
+    // 预览：Paged 增强 HTML（polyfill 内嵌）+ 块标记 + 快照指纹
+    let pv = app
+        .preview(&json!({"pm_doc": opened["pm_doc"]}))
+        .expect("预览应成功");
+    let html = pv["html"].as_str().unwrap();
+    assert!(
+        html.contains("__azodocPagedDone"),
+        "预览 HTML 应含 Paged 完成回调"
+    );
+    assert!(html.contains("Paged.js"), "polyfill 应内嵌");
+    assert!(html.contains("page-break"), "分页标记应在印刷 HTML 中");
+    assert!(
+        html.contains("data-block-id"),
+        "预览应带块标记（LayoutIndex）"
+    );
+    let snap = &pv["snapshot"];
+    assert_eq!(snap["content_hash"].as_str().unwrap().len(), 64);
+    assert_eq!(snap["layout_hash"].as_str().unwrap().len(), 64);
+    assert_eq!(snap["mode"], "pagedjs");
+    assert!(
+        pv["print_html"].as_str().unwrap().contains("前页"),
+        "未分页回退 HTML 可用"
+    );
+    assert_eq!(athanor_cli::verify_cmd::run(&doc), 0, "verify 必须通过");
+}

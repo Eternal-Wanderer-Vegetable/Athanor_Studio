@@ -108,7 +108,7 @@ fn agg_message(feature: &str, count: u64) -> String {
         RUN_PROPS => "run 直接格式属性在 v1 模型无对应",
         PARA_PROPS => "段落直接格式属性在 v1 模型无对应",
         TAB => "制表位退化为空格",
-        PAGE_BREAK => "分页符以水平分隔线近似表达",
+        PAGE_BREAK => "分页符映射为 page_break 块（呈现语义近似）",
         BOOKMARK => "书签锚点无对应表达",
         FIELD => "域指令无法建模（结果文本已保留）",
         SDT => "内容控件被透明解包",
@@ -876,7 +876,7 @@ fn map_run_child(c: &El, ctx: &mut BodyCtx, st: &mut InlineState, out: &mut Vec<
                     .bump(PAGE_BREAK, LossClass::Partial, "degraded", String::new());
                 ctx.pending_blocks.push(json!({
                     "id": ctx.job.idgen.uid("blk"),
-                    "type": "horizontal_rule",
+                    "type": "page_break",
                 }));
             }
             Some("column") => {

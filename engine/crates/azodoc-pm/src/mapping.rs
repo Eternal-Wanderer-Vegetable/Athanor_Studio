@@ -405,6 +405,17 @@ pub static NODES: &[NodeDef] = &[
         attrs: &[A_ID, A_EXTRA],
         prima_fields: &[],
     },
+    // E4：显式手动分页节点（分页是可观察 hint；DOCX ↔ w:br type="page"）。
+    NodeDef {
+        pm_name: "page_break",
+        prima_type: Some("page_break"),
+        group: "block",
+        content: None,
+        code: false,
+        id_kind: Some(IdKind::Blk),
+        attrs: &[A_ID, A_EXTRA],
+        prima_fields: &[],
+    },
     NodeDef {
         pm_name: "math_block",
         prima_type: Some("math_block"),
