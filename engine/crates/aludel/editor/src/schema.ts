@@ -203,7 +203,14 @@ const nodeToDOM: Record<string, (node: PMNode) => AnySpec> = {
     0,
   ],
   embed: (node) => ["div", { class: "az-embed" }, `embed: ${node.attrs.asset}`],
-  footnote: () => ["aside", { class: "az-footnote" }, 0],
+  // 回跳符供 footnoteClick 定位：点击跳回第一个引用点。
+  // PM 的 0（内容洞）必须是所在元素的唯一子节点——↩ 与内容 div 作兄弟。
+  footnote: () => [
+    "aside",
+    { class: "az-footnote" },
+    ["span", { class: "az-footnote-back", title: "跳回引用" }, "↩"],
+    ["div", { class: "az-footnote-body" }, 0],
+  ],
   // unknown = R2/R3 通道：只读卡片，payload 不进 DOM，只显示损失元数据
   unknown_block: (node) => [
     "div",
@@ -366,6 +373,34 @@ const nodeParseDOM: Record<string, AnySpec[]> = {
   ],
   horizontal_rule: [{ tag: "hr" }],
   hard_break: [{ tag: "br" }],
+  // E3 粘贴恢复面：编辑器自身 toDOM 产物 + 外部网页的最小集。
+  image: [
+    {
+      tag: "img[src]",
+      getAttrs: (dom: string | Node) => {
+        const el = dom as HTMLImageElement;
+        return { asset: el.getAttribute("src"), alt: el.getAttribute("alt") ?? "" };
+      },
+    },
+  ],
+  footnote_ref: [
+    {
+      tag: "sup.az-footnote-ref",
+      getAttrs: (dom: string | Node) => ({ id: (dom as HTMLElement).getAttribute("title") }),
+    },
+  ],
+  math_block: [
+    {
+      tag: "div.az-math[data-latex]",
+      getAttrs: (dom: string | Node) => ({ latex: (dom as HTMLElement).dataset.latex }),
+    },
+  ],
+  inline_math: [
+    {
+      tag: "code.az-inline-math[data-latex]",
+      getAttrs: (dom: string | Node) => ({ latex: (dom as HTMLElement).dataset.latex }),
+    },
+  ],
 };
 
 const markParseDOM: Record<string, AnySpec[]> = {

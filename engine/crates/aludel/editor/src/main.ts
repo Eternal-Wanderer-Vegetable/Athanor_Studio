@@ -26,6 +26,7 @@ import { schema } from "./schema";
 import { DocumentController, errText } from "./app/document-controller";
 import { CommandRegistry, type CommandContext } from "./app/command-registry";
 import { findAll, selectMatch, replaceCurrent, replaceAll } from "./app/find";
+import { gotoFootnote } from "./app/footnotes";
 import {
   addTableRow,
   addTableRowBefore,
@@ -259,6 +260,9 @@ reg("table.header", "切换表头", () => pmRun(toggleHeaderRow as never));
 reg("table.merge", "合并单元格", () => pmRun(mergeTableCells as never));
 reg("table.split", "拆分单元格", () => pmRun(splitTableCell as never));
 reg("table.fix", "修复表格结构", () => pmRun(fixTable as never));
+// 粘贴模式（E3）：Ctrl+V 保留格式 / Ctrl+Alt+V 匹配目标 / Ctrl+Shift+V 纯文本。
+// 模式判定在 controller 的 keydown/paste handler（ClipboardEvent 无修饰键）。
+reg("footnote.goto", "跳转脚注", () => pmRun(gotoFootnote as never));
 reg("insert.math", "数学块", () => {
   const v = ctl.view;
   if (!v) return;

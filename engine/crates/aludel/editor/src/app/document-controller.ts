@@ -23,6 +23,9 @@ import { keymap } from "prosemirror-keymap";
 import { liftListItem, sinkListItem, splitListItem } from "prosemirror-schema-list";
 import { columnResizing, tableEditing } from "prosemirror-tables";
 import { history, undo, redo } from "prosemirror-history";
+import { sanitizeHtml, sanitizeNotice, type PasteMode } from "./clipboard";
+import { mathNodeViews } from "./math-view";
+import { footnoteClick, footnoteDanglingPlugin } from "./footnotes";
 import type { Node as PMNode } from "prosemirror-model";
 import { schema, setAssetResolver } from "../schema";
 import type { DocumentGateway, DocResponse, JobRequest, JobSnapshot, SaveResult } from "../platform/gateway";
@@ -61,6 +64,8 @@ export class DocumentController {
   composing = false;
   private recoveryTimer: ReturnType<typeof setTimeout> | null = null;
   private recoveryGeneration = 0;
+  /** 最近一次 Ctrl/Alt/Shift+V 决定的粘贴模式（ClipboardEvent 无修饰键）。 */
+  private pendingPasteMode: PasteMode | null = null;
 
   constructor(host: HTMLElement, gateway: DocumentGateway, hooks: ControllerHooks) {
     this.host = host;
@@ -156,6 +161,13 @@ export class DocumentController {
           // 修复——不规则表只诊断，修复走显式 table.fix 命令。
           columnResizing({ cellMinWidth: 24 }),
           tableEditing(),
+          // 脚注定义被删且仍有引用 → 一次性提示（撤销可恢复；保存侧仍是硬门槛）
+          footnoteDanglingPlugin((ids) => {
+            this.hooks.onMessage(
+              `脚注定义已删除，${ids.length} 处引用失去目标——可撤销恢复，否则保存将被拒绝`,
+              false,
+            );
+          }),
           keymap({
             Enter: splitListItem(schema.nodes.list_item),
             Tab: sinkListItem(schema.nodes.list_item),
@@ -167,6 +179,7 @@ export class DocumentController {
         ],
       }),
       attributes: { spellcheck: "false" },
+      nodeViews: mathNodeViews(),
       handleDoubleClickOn: (v, _pos, node, nodePos) => {
         if (node.type.name === "math_block" || node.type.name === "inline_math") {
           const current = String(node.attrs.latex ?? "");
@@ -185,14 +198,45 @@ export class DocumentController {
         return false;
       },
       handleDOMEvents: {
+        // 粘贴模式 = 最近一次带修饰的 V 组合键（ClipboardEvent 本身无修饰键）：
+        // Ctrl+V keep / Ctrl+Alt+V match / Ctrl+Shift+V plain；菜单/右键粘贴按 keep。
+        keydown: (_v, event) => {
+          const e = event as KeyboardEvent;
+          const isV = (e.key ?? "").toLowerCase() === "v";
+          if (isV && (e.ctrlKey || e.metaKey)) {
+            this.pendingPasteMode = e.shiftKey ? "plain" : e.altKey ? "match" : "keep";
+          }
+          return false;
+        },
         paste: (v, event) => {
           const clipboard = event.clipboardData;
           const file = clipboard?.files?.[0];
-          if (!file || !file.type.startsWith("image/")) return false;
-          event.preventDefault();
-          void this.insertImageFile(file);
-          return true;
+          if (file && file.type.startsWith("image/")) {
+            event.preventDefault();
+            void this.insertImageFile(file);
+            return true;
+          }
+          const html = clipboard?.getData("text/html");
+          const text = clipboard?.getData("text/plain");
+          const mode = this.pendingPasteMode ?? "keep";
+          this.pendingPasteMode = null;
+          if (mode === "plain") {
+            if (!text) return false;
+            event.preventDefault();
+            v.pasteText(text);
+            return true;
+          }
+          if (html) {
+            event.preventDefault();
+            const r = sanitizeHtml(html, mode);
+            v.pasteHTML(r.html);
+            const note = sanitizeNotice(r);
+            if (note) this.hooks.onMessage(note, true);
+            return true;
+          }
+          return false; // 纯文本无 HTML：交给 PM 默认文本粘贴
         },
+        click: (v, event) => footnoteClick(v, event),
         drop: (v, event) => {
           const file = event.dataTransfer?.files?.[0];
           if (!file || !file.type.startsWith("image/")) return false;
