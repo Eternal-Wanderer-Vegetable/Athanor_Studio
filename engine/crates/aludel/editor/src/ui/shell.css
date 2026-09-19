@@ -42,15 +42,18 @@ select:focus-visible, summary:focus-visible {
   background: rgba(255, 255, 255, .12); color: inherit; font-size: 12.5px;
 }
 .appbar .cmd-search::placeholder { color: rgba(255, 255, 255, .55); }
+.appbar .doc-status { display: inline-flex; align-items: center; gap: 6px; }
+.appbar .doc-status .dirty-dot { color: var(--az-accent-strong); font-weight: 700; }
 .menubar { display: flex; align-items: center; gap: 2px; padding: 0 12px 2px; font-size: 13px; }
 .menubar .more-menu { position: relative; }
 
-/* 应用菜单下拉 */
+/* 应用菜单下拉（窄窗口内部滚动，不出现横向滚动或出屏项） */
 .az-menu {
   position: fixed; z-index: 80; min-width: 200px; padding: 4px;
   background: var(--az-bg-chrome-2); color: var(--az-fg);
   border: 1px solid var(--az-border-strong); border-radius: 6px;
   box-shadow: var(--az-shadow); font-size: 13px;
+  max-height: calc(100vh - 48px); overflow-y: auto;
 }
 .az-menu [role="menuitem"] {
   display: flex; justify-content: space-between; gap: 16px; width: 100%;
@@ -86,12 +89,17 @@ select:focus-visible, summary:focus-visible {
 }
 .ribbon.collapsed { display: none; }
 .ribbon .group {
-  display: flex; gap: 2px; padding: 0 10px 0 0; border-right: 1px solid var(--az-border);
-  align-items: center; flex: 0 0 auto; min-width: 0;
+  display: flex; flex-direction: column; gap: 0; padding: 0 10px 0 0;
+  border-right: 1px solid var(--az-border);
+  align-items: stretch; flex: 0 0 auto; min-width: 0;
 }
 .ribbon .group:last-child { border-right: 0; }
+.ribbon .group-items {
+  display: flex; gap: 2px; align-items: center; flex: 1 1 auto; min-height: 0;
+}
 .ribbon .group-label {
-  align-self: flex-end; font-size: 10px; color: var(--az-fg-dim); padding-bottom: 1px;
+  align-self: stretch; text-align: center; font-size: 10px;
+  color: var(--az-fg-dim); padding: 1px 4px 0; user-select: none;
 }
 .ribbon button {
   padding: 4px 9px; border: 1px solid transparent; border-radius: var(--az-radius);
@@ -109,6 +117,11 @@ select:focus-visible, summary:focus-visible {
   width: 34px; height: var(--az-control-h); padding: 1px 2px;
   border: 1px solid var(--az-border); border-radius: var(--az-radius); background: var(--az-paper);
 }
+/* 混合选区取值：picker 标混合态而非显示旧值（input[type=color] 不能写空串） */
+.mixed-value, .picker-slot .mixed-value {
+  outline: 1px dashed var(--az-accent); outline-offset: -1px;
+}
+select.mixed-value { font-style: italic; }
 .ribbon .overflow-btn { flex: 0 0 auto; }
 .ribbon .group.overflowed { display: none; }
 .ribbon-overflow-menu .group-title { padding: 4px 10px; font-size: 11px; color: var(--az-fg-dim); }
@@ -274,6 +287,13 @@ html[data-theme="dark"] .side-pane section, html[data-theme="dark"] .inspector-p
 .statusbar button { background: none; border: 0; color: inherit; cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px; }
 .statusbar button:hover { background: rgba(255, 255, 255, .12); }
 #sb-save.dirty { color: var(--az-accent-strong); }
+.sb-view-slot { display: inline-flex; gap: 2px; }
+.sb-view-slot button[aria-pressed="true"] { background: rgba(255, 255, 255, .18); }
+.shortcuts-menu .shortcut-row {
+  display: flex; justify-content: space-between; gap: 16px;
+  padding: 5px 10px; font-size: 13px;
+}
+.az-menu .group-title { padding: 4px 10px; font-size: 11px; color: var(--az-fg-dim); }
 .tag { display: inline-block; padding: 0 6px; border-radius: 4px; font-size: 11px; background: #eee3cf; color: #6b5636; margin-right: 4px; }
 .tag--human { background: #dde8d5; color: #3d6b35; }
 .tag--ai { background: #e3ddf2; color: #55468a; }

@@ -74,6 +74,7 @@ export class Ribbon {
       tab.type = "button";
       tab.id = `tab-${t.id}`;
       tab.setAttribute("role", "tab");
+      tab.setAttribute("aria-controls", "ribbon-panel");
       tab.textContent = t.label;
       tab.dataset.tab = t.id;
       if (t.contextual) tab.classList.add("contextual");
@@ -188,6 +189,7 @@ export class Ribbon {
       return;
     }
     panel.setAttribute("role", "tabpanel");
+    panel.setAttribute("aria-labelledby", `tab-${this.activeTab}`);
     panel.setAttribute("aria-label", RIBBON_TABS.find((t) => t.id === this.activeTab)?.label ?? "");
 
     panel.replaceChildren();
@@ -195,15 +197,19 @@ export class Ribbon {
     for (const g of this.deps.registry.groupsFor(this.activeTab, ctx)) {
       const group = el("div", "group");
       group.dataset.group = g.name;
+      const items = el("div", "group-items");
       for (const cmd of g.commands) {
         // picker 型命令（字体/字号/颜色/高亮）由 shell 渲染专属控件
         if (cmd.id === "format.font" || cmd.id === "format.size" ||
             cmd.id === "format.color" || cmd.id === "format.highlight") {
-          group.appendChild(this.pickerSlot(cmd.id));
+          items.appendChild(this.pickerSlot(cmd.id));
           continue;
         }
-        group.appendChild(cmdButton(cmd.elId ?? null, cmd.id, cmd.label, cmd.shortcut));
+        items.appendChild(cmdButton(cmd.elId ?? null, cmd.id, cmd.label, cmd.shortcut));
       }
+      group.appendChild(items);
+      // Word 风格组标题：可读的中文组名（溢出时整组收进“更多”）
+      if (g.name) group.appendChild(el("div", "group-label", g.name));
       panel.appendChild(group);
     }
     // 溢出按钮（占位；applyOverflow 决定是否可见）

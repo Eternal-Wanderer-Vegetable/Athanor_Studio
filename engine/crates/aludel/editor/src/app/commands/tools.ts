@@ -4,7 +4,7 @@
 //! 审阅/工具/帮助域命令：文档检查（原“文档检查”菜单并入工具/审阅）、
 //! 快捷键一览。批注线程/修订追踪尚无模型能力——不放假入口。
 
-import { el } from "../../ui/dom";
+import { el, setMsg } from "../../ui/dom";
 import type { CommandDeps } from "./deps";
 import type { RegDef } from "./types";
 
@@ -18,6 +18,13 @@ export function toolsCommands(deps: CommandDeps): RegDef[] {
     } },
     // 修订历史/标注/损失盘点在检查面板中派生渲染；还原入口在历史列表项上。
     // 批注线程/trackedChanges/fields/toc/referenceCitations：模型未就绪（planned）。
+    { id: "panels.comments", label: "批注", run: () => {
+      // 批注线程没有文档模型：显示诊断入口而不是空列表/假线程。
+      setMsg("批注功能暂不可用——文档模型未就绪，已在路线图中（不做假列表）。", true);
+    }, opts: {
+      needsDoc: false, focusPolicy: "keep",
+      keywords: ["comment", "pizhu", "bizhu"],
+    } },
     { id: "help.shortcuts", label: "快捷键一览", run: () => {
       // 数据来自同一 registry 投影——面板只读元数据，不另存副本。
       const items = deps.registry.all()
