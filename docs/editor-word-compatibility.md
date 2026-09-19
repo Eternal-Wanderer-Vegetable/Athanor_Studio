@@ -49,6 +49,11 @@
 | edit.redo | 重做 | 编辑 | 开始/编辑 | — | Ctrl+Y | — | implemented |
 | edit.find | 查找 | 编辑 | 开始/编辑 | — | Ctrl+F | — | implemented |
 | edit.replace | 替换 | 编辑 | 开始/编辑 | — | Ctrl+H | — | implemented |
+| edit.pasteKeep | 粘贴（保留格式） | 编辑 | — | — | Ctrl+V（原生） | — | implemented |
+| edit.pastePlain | 粘贴为纯文本 | 编辑 | — | — | Ctrl+Shift+V（原生） | — | implemented |
+| edit.pasteMatch | 粘贴（匹配格式） | 编辑 | — | — | Ctrl+Alt+V（原生） | — | implemented |
+| edit.copy | 复制 | 编辑 | — | — | Ctrl+C（原生） | — | implemented |
+| edit.cut | 剪切 | 编辑 | — | — | Ctrl+X（原生） | — | implemented |
 | format.font | 字体 | — | 开始/字体 | ✓ | — | — | implemented（picker） |
 | format.size | 字号 | — | 开始/字体 | ✓ | — | — | implemented（picker） |
 | format.color | 文字颜色 | — | 开始/字体 | ✓ | — | — | implemented（picker） |
@@ -58,6 +63,8 @@
 | format.underline | 下划线 | 格式 | 开始/字体 | ✓ | Ctrl+U | — | implemented |
 | format.strike | 删除线 | 格式 | 开始/字体 | ✓ | — | — | implemented |
 | format.code | 行内代码 | 格式 | 开始/字体 | ✓ | — | — | implemented |
+| format.subscript | 下标 | 格式 | 开始/字体 | — | — | — | implemented |
+| format.superscript | 上标 | 格式 | 开始/字体 | — | — | — | implemented |
 | format.link | 链接 | 插入 | 插入/链接 | ✓ | — | — | implemented |
 | format.clear | 清除格式 | 格式 | 开始/段落 | — | — | — | implemented |
 | para.alignLeft | 左对齐 | 格式 | 开始/段落 | — | — | — | implemented |
@@ -66,6 +73,9 @@
 | para.alignJustify | 两端对齐 | 格式 | 开始/段落 | — | — | — | implemented |
 | para.indentMore | 增加缩进 | 格式 | 开始/段落 | — | — | — | implemented |
 | para.indentLess | 减少缩进 | 格式 | 开始/段落 | — | — | — | implemented |
+| para.lineHeight | 行距 | — | 开始/段落 | — | — | — | implemented（picker） |
+| para.spacing | 段间距… | 格式 | 开始/段落 | — | — | — | implemented |
+| block.style | 样式 | — | 开始/样式 | — | — | — | implemented（picker） |
 | block.para | 正文 | — | 开始/样式 | — | — | — | implemented |
 | block.h1 / h2 / h3 | 标题 1/2/3 | — | 开始/样式 | — | — | — | implemented |
 | block.quote | 引用 | — | 开始/样式 | — | — | — | implemented |
@@ -82,6 +92,9 @@
 | insert.rule | 分隔线 | 插入 | 插入/符号 | — | — | — | implemented |
 | insert.pageBreak | 分页符 | 插入 | 插入/页面 | — | — | — | implemented |
 | view.preview | 打印预览 | 视图 | 视图/预览 | — | Ctrl+P | previewPaged | implemented |
+| view.modeContinuous | 连续编辑 | 视图 | 视图/显示 + 状态栏 | — | — | — | implemented |
+| view.modePageWidth | 页宽视图 | 视图 | 视图/显示 + 状态栏 | — | — | — | implemented |
+| view.pageView | 页面视图（预览） | 视图 | 视图/显示 + 状态栏 | — | — | previewPaged | implemented |
 | view.toggleOutline | 大纲面板 | 视图 | 视图/面板 | — | — | — | implemented |
 | view.toggleInspector | 检查面板 | 视图 | 视图/面板 | — | — | — | implemented |
 | view.ribbonCollapse | 折叠功能区 | 视图 | 视图/面板 | — | — | — | implemented |

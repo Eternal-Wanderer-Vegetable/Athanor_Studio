@@ -20,6 +20,23 @@ export function layoutViewCommands(deps: CommandDeps): RegDef[] {
       tab: "layout", group: "页面设置", groupOrder: 10, elId: "m-page-settings",
       menu: "view", menuOrder: 20, focusPolicy: "keep", keywords: ["page", "yemian"],
     } },
+    // ---- 显示模式（连续/页宽/页面预览；状态栏 sb-view 同名命令） ----
+    { id: "view.modeContinuous", label: "连续编辑", run: () => deps.setViewMode("continuous"), opts: {
+      tab: "view", group: "显示", groupOrder: 15, elId: "sb-view-continuous",
+      surfaces: ["ribbon", "statusbar", "palette", "menu"], menu: "view", menuOrder: 5,
+      active: () => deps.getViewMode() === "continuous", keywords: ["continuous", "lianxu"],
+    } },
+    { id: "view.modePageWidth", label: "页宽视图", run: () => deps.setViewMode("pageWidth"), opts: {
+      tab: "view", group: "显示", groupOrder: 15, elId: "sb-view-pagewidth",
+      surfaces: ["ribbon", "statusbar", "palette", "menu"], menu: "view", menuOrder: 6,
+      active: () => deps.getViewMode() === "pageWidth", keywords: ["page width", "yekuan"],
+    } },
+    { id: "view.pageView", label: "页面视图（预览）", run: () => void deps.openPreview(), opts: {
+      caps: ["previewPaged"], tab: "view", group: "显示", groupOrder: 15, elId: "sb-view-page",
+      surfaces: ["ribbon", "statusbar", "palette", "menu"],
+      menu: "view", menuOrder: 7, needsDoc: true, focusPolicy: "keep",
+      keywords: ["page view", "yemianshitu"],
+    } },
     // ---- 预览 ----
     { id: "view.preview", label: "打印预览", run: () => void deps.openPreview(), opts: {
       shortcut: "Ctrl+P", caps: ["previewPaged"],

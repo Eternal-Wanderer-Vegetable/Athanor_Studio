@@ -160,7 +160,7 @@ describe("capability/mode projections", () => {
     const gw = { desktop: true, capabilities: CAPS };
     const c = buildCommandContext({
       gateway: gw, hasDocument: true, dirty: true, busy: false,
-      sel: { kind: "text", inTable: false, character: { values: {}, mixed: [] }, paragraph: { values: {}, mixed: [] } },
+      sel: { kind: "text", inTable: false, character: { values: {}, mixed: [] }, paragraph: { values: {}, mixed: [] }, blockType: "paragraph" },
       viewMode: "page", previewOpen: false, pageCount: 3,
     });
     expect(c).toMatchObject({

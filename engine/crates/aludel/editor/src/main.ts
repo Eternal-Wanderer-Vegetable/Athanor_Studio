@@ -69,8 +69,12 @@ const gateway = tauriMode ? new TauriGateway() : new HttpGateway();
 
 let lastChars = 0;
 let zoom = 1;
+/** 页宽模式前的用户缩放（切回连续模式恢复）。 */
+let userZoom = 1;
+/** 视图模式：continuous/pageWidth；"page" 由预览浮层承担，不进此变量。 */
+let viewMode: "continuous" | "pageWidth" = "continuous";
 /** 最近一次成功预览的分页结果（正文一代际变化即失效）。 */
-let previewPages: { generation: number; count: number } | null = null;
+let previewPages: { generation: number; count: number; pageOfBlock: Record<string, number> } | null = null;
 /** 预览浮层是否打开（CommandContext.mode = "preview" 的唯一来源）。 */
 let previewOpen = false;
 
@@ -105,7 +109,7 @@ function ctx(): CommandContext {
     dirty: s.dirty,
     busy: s.activeJob !== null || s.saveState === "saving",
     sel: sel(),
-    viewMode: "continuous",
+    viewMode,
     previewOpen,
     pageCount: previewPageCount(),
   });
@@ -133,6 +137,8 @@ function applyFocusPolicy(cmd: { id: string; focusPolicy?: FocusPolicy }, _from?
 
 const shell = new Shell({
   applyChar,
+  applyPara: (p) => applyPara(p),
+  runCommand,
   refreshUI,
   sel,
 });
@@ -186,6 +192,26 @@ function setZoom(z: number): void {
   refreshUI();
 }
 
+/** 页宽视图：算出恰好铺满工作区宽度的缩放（CSS zoom，与手动缩放同一通道）。 */
+function setViewMode(mode: "continuous" | "pageWidth" | "page"): void {
+  if (mode === "page") { void openPreview(); return; }
+  if (mode === viewMode) return;
+  const workspace = document.querySelector<HTMLElement>(".workspace");
+  const page = document.querySelector<HTMLElement>(".page");
+  if (mode === "pageWidth") {
+    userZoom = zoom;
+    if (workspace && page) {
+      // zoom 作用于 .page 的视觉宽度；rect 已是缩放后的值，除回原宽度
+      const rawPageWidth = page.getBoundingClientRect().width / zoom;
+      if (rawPageWidth > 0) setZoom(Math.floor(workspace.clientWidth / rawPageWidth * 100) / 100);
+    }
+  } else {
+    setZoom(userZoom);
+  }
+  viewMode = mode;
+  refreshUI();
+}
+
 /** picker 型命令（字体/字号/颜色/高亮）：菜单/面板触发打开 ribbon 控件，
  *  不执行空 run（命令矩阵 §5）。 */
 function openPicker(pickerId: string): void {
@@ -224,8 +250,11 @@ const deps: CommandDeps = {
   registry,
   applyPara,
   applyChar,
+  sel,
   getZoom: () => zoom,
   setZoom,
+  getViewMode: () => viewMode,
+  setViewMode,
   openPreview,
   toggleFindBar,
   openPicker,
@@ -316,9 +345,9 @@ async function openPreview(): Promise<void> {
     outcome = await previewSurface.open(result);
   }
   previewOpen = false;
-  previewPages = outcome.fallback || outcome.page_count === null
+  previewPages = outcome.fallback || outcome.page_count === null || !outcome.layout
     ? null
-    : { generation, count: outcome.page_count };
+    : { generation, count: outcome.page_count, pageOfBlock: outcome.layout.page_of_block };
   if (typeof override !== "number") {
     const breaks = outcome.layout?.page_breaks.length ?? 0;
     if (outcome.fallback) {
@@ -339,6 +368,18 @@ async function openPreview(): Promise<void> {
 function previewPageCount(): number | null {
   if (!previewPages) return null;
   return previewPages.generation === ctl.store.state.editGeneration ? previewPages.count : null;
+}
+
+/** 光标所在块的预览页码（同一快照内才有效；无数据返回 null）。 */
+function currentPageNumber(): number | null {
+  const v = ctl.view;
+  if (!v || !previewPages || previewPages.generation !== ctl.store.state.editGeneration) return null;
+  const { $from } = v.state.selection;
+  for (let d = $from.depth; d >= 0; d--) {
+    const id = $from.node(d).attrs?.id as string | undefined;
+    if (id && previewPages.pageOfBlock[id] !== undefined) return previewPages.pageOfBlock[id];
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------- 统一刷新
@@ -385,6 +426,8 @@ function refreshUI(): void {
     revision: s.revision,
     zoom,
     pageCount: previewPageCount(),
+    currentPage: currentPageNumber(),
+    viewMode,
   });
   renderInspector(sel());
   // 格式控件回显（含混合选区归并；IME 组合中不回写）

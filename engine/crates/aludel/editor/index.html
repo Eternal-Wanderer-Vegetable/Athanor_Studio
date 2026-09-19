@@ -70,7 +70,11 @@
     <span id="sb-mode">连续编辑</span>
     <span id="sb-lang">中文</span>
     <span class="spacer"></span>
-    <span id="sb-view" class="sb-view-slot"></span>
+    <span id="sb-view" class="sb-view-slot">
+      <button id="sb-view-continuous" data-cmd="view.modeContinuous" title="连续编辑">连续</button>
+      <button id="sb-view-pagewidth" data-cmd="view.modePageWidth" title="页宽视图">页宽</button>
+      <button id="sb-view-page" data-cmd="view.pageView" title="页面视图（预览）">页面</button>
+    </span>
     <button id="sb-zoom-out" data-cmd="view.zoomOut" aria-label="缩小">−</button>
     <button id="sb-zoom-reset" data-cmd="view.zoomReset" aria-label="缩放还原"><span id="sb-zoom">100%</span></button>
     <button id="sb-zoom-in" data-cmd="view.zoomIn" aria-label="放大">＋</button>

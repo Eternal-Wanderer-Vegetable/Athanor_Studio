@@ -199,9 +199,10 @@ export class Ribbon {
       group.dataset.group = g.name;
       const items = el("div", "group-items");
       for (const cmd of g.commands) {
-        // picker 型命令（字体/字号/颜色/高亮）由 shell 渲染专属控件
+        // picker 型命令（字体/字号/颜色/高亮/行距/样式）由 shell 渲染专属控件
         if (cmd.id === "format.font" || cmd.id === "format.size" ||
-            cmd.id === "format.color" || cmd.id === "format.highlight") {
+            cmd.id === "format.color" || cmd.id === "format.highlight" ||
+            cmd.id === "para.lineHeight" || cmd.id === "block.style") {
           items.appendChild(this.pickerSlot(cmd.id));
           continue;
         }

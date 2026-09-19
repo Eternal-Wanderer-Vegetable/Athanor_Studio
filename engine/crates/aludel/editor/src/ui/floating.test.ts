@@ -32,6 +32,7 @@ function selCtx(kind: SelectionContext["kind"] = "text"): SelectionContext {
     inTable: false,
     character: { values: {}, mixed: [] },
     paragraph: { values: {}, mixed: [] },
+    blockType: "paragraph",
   };
 }
 

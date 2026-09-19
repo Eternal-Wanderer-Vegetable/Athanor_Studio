@@ -12,6 +12,7 @@ import {
   clearCharacterFormat,
   clearParagraphFormat,
 } from "../format";
+import { el } from "../../ui/dom";
 import type { CommandDeps } from "./deps";
 import type { RegDef } from "./types";
 import type { CommandSurface } from "../command-registry";
@@ -82,6 +83,24 @@ export function formatCommands(deps: CommandDeps): RegDef[] {
       surfaces: ["ribbon", "palette", "menu", ...FLOATING], menu: "format", menuOrder: 4,
       active: () => markActive("code"), keywords: ["code", "daima"],
     } },
+    { id: "format.subscript", label: "下标", run: () => {
+      const cur = deps.sel()?.character.values.verticalAlign;
+      deps.applyChar({ verticalAlign: cur === "sub" ? undefined : "sub" });
+    }, opts: {
+      tab: "home", group: "字体", groupOrder: 20, elId: "tb-sub",
+      surfaces: ["ribbon", "palette", "menu"], menu: "format", menuOrder: 5,
+      active: () => deps.sel()?.character.values.verticalAlign === "sub",
+      keywords: ["subscript", "xiabiao"],
+    } },
+    { id: "format.superscript", label: "上标", run: () => {
+      const cur = deps.sel()?.character.values.verticalAlign;
+      deps.applyChar({ verticalAlign: cur === "super" ? undefined : "super" });
+    }, opts: {
+      tab: "home", group: "字体", groupOrder: 20, elId: "tb-super",
+      surfaces: ["ribbon", "palette", "menu"], menu: "format", menuOrder: 6,
+      active: () => deps.sel()?.character.values.verticalAlign === "super",
+      keywords: ["superscript", "shangbiao"],
+    } },
     { id: "format.link", label: "链接", run: () => {
       const v = ctl.view;
       if (!v) return;
@@ -132,7 +151,47 @@ export function formatCommands(deps: CommandDeps): RegDef[] {
       tab: "home", group: "段落", groupOrder: 30, elId: "tb-indent-less",
       menu: "format", menuOrder: 15,
     } },
+    // ---- 行距/段间距（picker + 预设菜单，同一 applyPara 事务通道） ----
+    { id: "para.lineHeight", label: "行距", run: () => deps.openPicker("tb-lineheight"), opts: {
+      tab: "home", group: "段落", groupOrder: 30, surfaces: ["ribbon", "palette"],
+      focusPolicy: "keep", keywords: ["line height", "xingju", "hangju"],
+    } },
+    { id: "para.spacing", label: "段间距…", run: () => {
+      const menu = el("div", "az-menu spacing-menu");
+      menu.setAttribute("role", "menu");
+      const presets: { label: string; patch: { spaceBeforePt?: number; spaceAfterPt?: number } }[] = [
+        { label: "无段间距", patch: { spaceBeforePt: undefined, spaceAfterPt: undefined } },
+        { label: "段前 6pt", patch: { spaceBeforePt: 6 } },
+        { label: "段后 6pt", patch: { spaceAfterPt: 6 } },
+        { label: "段前后各 6pt", patch: { spaceBeforePt: 6, spaceAfterPt: 6 } },
+        { label: "段前后各 12pt", patch: { spaceBeforePt: 12, spaceAfterPt: 12 } },
+      ];
+      for (const p of presets) {
+        const it = el("button") as HTMLButtonElement;
+        it.type = "button";
+        it.setAttribute("role", "menuitem");
+        it.textContent = p.label;
+        it.addEventListener("click", () => {
+          deps.overlays.close(false);
+          deps.applyPara(p.patch);
+          deps.ctl.view?.focus();
+        });
+        menu.appendChild(it);
+      }
+      const anchor = document.querySelector<HTMLElement>("[data-cmd='para.spacing']");
+      const r = anchor?.getBoundingClientRect();
+      menu.style.left = `${Math.max(4, r?.left ?? 100)}px`;
+      menu.style.top = `${(r?.bottom ?? 100) + 2}px`;
+      deps.overlays.show(menu, { restoreFocus: null });
+    }, opts: {
+      tab: "home", group: "段落", groupOrder: 30, elId: "tb-spacing",
+      menu: "format", menuOrder: 16, focusPolicy: "keep", keywords: ["spacing", "duanjianju"],
+    } },
     // ---- 样式（schema 支持的块类型；无 schema 支撑的样式不出现） ----
+    { id: "block.style", label: "样式", run: () => deps.openPicker("tb-style"), opts: {
+      tab: "home", group: "样式", groupOrder: 40, surfaces: ["ribbon", "palette"],
+      focusPolicy: "keep", keywords: ["style", "yangshi"],
+    } },
     { id: "block.para", label: "正文", run: () => pmRun(setBlockType(schema.nodes.paragraph) as never), opts: {
       tab: "home", group: "样式", groupOrder: 40, elId: "tb-para",
       menu: "format", menuOrder: 20,

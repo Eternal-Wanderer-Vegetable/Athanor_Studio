@@ -69,6 +69,18 @@ describe("selectionContext", () => {
     const sc = selectionContext(view);
     expect(sc.kind).toBe("text");
     expect(sc.inTable).toBe(false);
+    expect(sc.blockType).toBe("paragraph");
+    view.destroy();
+  });
+
+  it("blockType reflects enclosing heading level", () => {
+    const heading = schema.nodes.heading.create({ id: "blk_h", level: 2 }, schema.text("标题"));
+    const doc = schema.nodes.doc.create(null, [heading]);
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const view = new EditorView(host, { state: EditorState.create({ doc }) });
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 2)));
+    expect(selectionContext(view).blockType).toBe("heading2");
     view.destroy();
   });
 });

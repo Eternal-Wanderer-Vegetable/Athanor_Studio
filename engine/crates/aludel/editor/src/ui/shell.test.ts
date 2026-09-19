@@ -19,6 +19,7 @@ function selCtx(values: SelectionContext["character"]["values"], mixed: string[]
     inTable: false,
     character: { values, mixed: mixed as never },
     paragraph: { values: {}, mixed: [] },
+    blockType: "paragraph",
   };
 }
 

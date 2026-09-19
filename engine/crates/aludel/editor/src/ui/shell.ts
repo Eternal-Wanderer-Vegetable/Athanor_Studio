@@ -18,7 +18,7 @@
 //! 另提供字体/字号/颜色/高亮 picker 控件——ribbon 槽位与浮动条共用，
 //! 值仍经 applyChar → PM transaction 写入。
 
-import type { CharacterFormat, SelectionContext } from "../app/format";
+import type { CharacterFormat, ParagraphFormat, SelectionContext } from "../app/format";
 import { $, el, loadPref, savePref } from "./dom";
 
 const PREF_THEME = "az.theme";
@@ -27,9 +27,24 @@ const PREF_RIGHT = "az.panel.right";
 
 const FONT_OPTIONS = ["", "宋体", "黑体", "微软雅黑", "仿宋", "楷体", "SimSun", "Georgia", "Consolas"];
 const SIZE_OPTIONS = ["", "9", "10.5", "12", "14", "16", "18", "22", "26", "36"];
+const LINE_HEIGHT_OPTIONS = ["", "1.0", "1.15", "1.5", "1.75", "2.0", "2.5", "3.0"];
+/** 样式选择器：仅列出 schema 已有命令的块类型（无 schema 支撑的样式不出现）。 */
+const STYLE_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "样式" },
+  { value: "paragraph", label: "正文" },
+  { value: "heading1", label: "标题 1" },
+  { value: "heading2", label: "标题 2" },
+  { value: "heading3", label: "标题 3" },
+  { value: "quote", label: "引用" },
+  { value: "code_block", label: "代码块" },
+];
 
 export interface ShellDeps {
   applyChar: (patch: CharacterFormat) => void;
+  /** 段落格式事务（行距等 picker 的写入通道）。 */
+  applyPara?: (patch: ParagraphFormat) => void;
+  /** 块样式切换（样式选择器 → 既有 block.* 命令，不复制实现）。 */
+  runCommand?: (id: string) => void;
   /** 状态栏/检查器刷新（偏好变化也要刷新命令 active 态）。 */
   refreshUI: () => void;
   sel: () => SelectionContext | null;
@@ -126,6 +141,39 @@ export class Shell {
         input.addEventListener("input", () => this.deps.applyChar({ highlight: input.value }));
         return input;
       }
+      case "para.lineHeight": {
+        const sel = el("select") as HTMLSelectElement;
+        sel.id = `${prefix}-lineheight`;
+        sel.title = "行距";
+        sel.setAttribute("aria-label", "行距");
+        for (const s of LINE_HEIGHT_OPTIONS) {
+          sel.appendChild(new Option(s || "行距", s));
+        }
+        sel.addEventListener("change", () => {
+          const v = Number(sel.value);
+          this.deps.applyPara?.({ lineHeight: Number.isFinite(v) && v > 0 ? v : undefined });
+        });
+        return sel;
+      }
+      case "block.style": {
+        const sel = el("select") as HTMLSelectElement;
+        sel.id = `${prefix}-style`;
+        sel.title = "样式";
+        sel.setAttribute("aria-label", "样式");
+        for (const o of STYLE_OPTIONS) {
+          sel.appendChild(new Option(o.label, o.value));
+        }
+        sel.addEventListener("change", () => {
+          // 样式选择器把选项路由到既有 block.* 命令——不复制实现。
+          const map: Record<string, string> = {
+            paragraph: "block.para", heading1: "block.h1", heading2: "block.h2",
+            heading3: "block.h3", quote: "block.quote", code_block: "block.codeblock",
+          };
+          const cmdId = map[sel.value];
+          if (cmdId) this.deps.runCommand?.(cmdId);
+        });
+        return sel;
+      }
       default:
         return null;
     }
@@ -173,5 +221,12 @@ export class Shell {
     setColor("fb-color", cf?.values.color, mixed.has("color"));
     setColor("tb-highlight", cf?.values.highlight, mixed.has("highlight"));
     setColor("fb-highlight", cf?.values.highlight, mixed.has("highlight"));
+    // 段落/样式 picker：同一 SelectionContext 的归并视图
+    const pf = sel?.paragraph;
+    const pMixed = new Set(pf?.mixed ?? []);
+    setSelect("tb-lineheight",
+      pf?.values.lineHeight !== undefined ? String(pf!.values.lineHeight) : "",
+      pMixed.has("lineHeight"));
+    setSelect("tb-style", sel?.blockType ?? "", false);
   }
 }

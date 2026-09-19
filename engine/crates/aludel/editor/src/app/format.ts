@@ -358,10 +358,12 @@ export type SelectionKind = "empty" | "text" | "table" | "image" | "node";
 
 export interface SelectionContext {
   kind: SelectionKind;
-  /** 选区是否位于表格内（上下文 Table tab 的依据）。 */
+  /** 选区是否位于表格内（上下文 Table tab 与表格命令的启用依据）。 */
   inTable: boolean;
   character: SelectionCharacterFormat;
   paragraph: SelectionParagraphFormat;
+  /** 当前块类型键（样式选择器回显：paragraph/heading1-3/quote/code_block/其他）。 */
+  blockType: string;
   /** image 节点的 alt（图片上下文用；无则 undefined）。 */
   imageAlt?: string;
 }
@@ -384,6 +386,20 @@ function selectionInTable(view: EditorView): boolean {
   return false;
 }
 
+/** 当前块类型键（样式选择器回显）。 */
+function blockTypeOf(view: EditorView): string {
+  const { $from } = view.state.selection;
+  for (let d = $from.depth; d >= 0; d--) {
+    const n = $from.node(d);
+    if (!n.isBlock) continue;
+    const name = n.type.name;
+    if (name === "heading") return `heading${Number(n.attrs.level) || 1}`;
+    if (name === "list_item") continue; // 列表项往上找父块
+    return name;
+  }
+  return "paragraph";
+}
+
 /** 派生只读选区上下文（ribbon/inspector/floating toolbar 的输入）。 */
 export function selectionContext(view: EditorView): SelectionContext {
   const sel = view.state.selection;
@@ -400,6 +416,7 @@ export function selectionContext(view: EditorView): SelectionContext {
     inTable,
     character: selectionCharacterFormat(view),
     paragraph: selectionParagraphFormat(view),
+    blockType: blockTypeOf(view),
     imageAlt: kind === "image" ? (node?.attrs.alt as string | undefined) : undefined,
   };
 }
