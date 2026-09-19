@@ -145,20 +145,33 @@ export class Shell {
     const sel = this.deps.sel();
     const cf = sel?.character;
     const mixed = new Set(cf?.mixed ?? []);
-    const set = (id: string, value: string, isMixed: boolean) => {
-      const node = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
+    const baseTitle = (node: HTMLElement): string =>
+      (node.dataset.baseTitle ??= node.title || node.getAttribute("aria-label") || "");
+    // select：混合态回退为空选项，附混合标记
+    const setSelect = (id: string, value: string, isMixed: boolean) => {
+      const node = document.getElementById(id) as HTMLSelectElement | null;
       if (!node || document.activeElement === node) return;
       node.value = isMixed ? "" : value;
-      node.title = isMixed ? "混合" : node.title.split("（混合）")[0];
+      node.title = isMixed ? `${baseTitle(node)}（混合）` : baseTitle(node);
       node.classList.toggle("mixed-value", isMixed);
     };
-    set("tb-font", cf?.values.fontFamily ?? "", mixed.has("fontFamily"));
-    set("tb-size", cf?.values.fontSizePt !== undefined ? String(cf!.values.fontSizePt) : "", mixed.has("fontSizePt"));
-    set("fb-font", cf?.values.fontFamily ?? "", mixed.has("fontFamily"));
-    set("fb-size", cf?.values.fontSizePt !== undefined ? String(cf!.values.fontSizePt) : "", mixed.has("fontSizePt"));
-    const colEl = document.getElementById("tb-color") as HTMLInputElement | null;
-    if (colEl && document.activeElement !== colEl && cf?.values.color) colEl.value = cf.values.color;
-    const hlEl = document.getElementById("tb-highlight") as HTMLInputElement | null;
-    if (hlEl && document.activeElement !== hlEl && cf?.values.highlight) hlEl.value = cf.values.highlight;
+    // input[type=color]：不能写空串——混合态只打标记，不把旧选区颜色
+    // 当当前值显示；统一值/无值时才回写或清除标记。
+    const setColor = (id: string, value: string | undefined, isMixed: boolean) => {
+      const node = document.getElementById(id) as HTMLInputElement | null;
+      if (!node || document.activeElement === node) return;
+      node.title = isMixed ? `${baseTitle(node)}（混合）` : baseTitle(node);
+      node.classList.toggle("mixed-value", isMixed);
+      node.dataset.mixed = isMixed ? "true" : "";
+      if (!isMixed && value) node.value = value;
+    };
+    setSelect("tb-font", cf?.values.fontFamily ?? "", mixed.has("fontFamily"));
+    setSelect("tb-size", cf?.values.fontSizePt !== undefined ? String(cf!.values.fontSizePt) : "", mixed.has("fontSizePt"));
+    setSelect("fb-font", cf?.values.fontFamily ?? "", mixed.has("fontFamily"));
+    setSelect("fb-size", cf?.values.fontSizePt !== undefined ? String(cf!.values.fontSizePt) : "", mixed.has("fontSizePt"));
+    setColor("tb-color", cf?.values.color, mixed.has("color"));
+    setColor("fb-color", cf?.values.color, mixed.has("color"));
+    setColor("tb-highlight", cf?.values.highlight, mixed.has("highlight"));
+    setColor("fb-highlight", cf?.values.highlight, mixed.has("highlight"));
   }
 }

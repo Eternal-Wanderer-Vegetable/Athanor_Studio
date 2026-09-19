@@ -56,8 +56,23 @@ export class FloatingBar {
       this.bar.id = "floating-bar";
       this.bar.setAttribute("role", "toolbar");
       this.bar.setAttribute("aria-label", "格式");
-      // 鼠标按下不转移焦点/不清选区（Word 浮动条行为）
-      this.bar.addEventListener("mousedown", (e) => e.preventDefault());
+      // 鼠标按下不转移焦点/不清选区（Word 浮动条行为）；
+      // 原生控件（select/color/input）放行默认 mousedown/focus，
+      // 否则 picker 无法聚焦和展开（命令仍统一走 data-cmd 派发）。
+      this.bar.addEventListener("mousedown", (e) => {
+        const t = e.target as HTMLElement | null;
+        if (t?.closest("select, input, textarea")) return;
+        e.preventDefault();
+      });
+      // picker 聚焦时 Escape 把焦点归还正文（选区保留，不关闭文档状态）
+      this.bar.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape") return;
+        const t = e.target as HTMLElement | null;
+        if (t?.closest("select, input, textarea")) {
+          e.stopPropagation();
+          t.blur();
+        }
+      });
       const ctx = this.deps.ctx();
       for (const cmd of this.deps.registry.floating(ctx)) {
         if (cmd.id.startsWith("format.") && this.deps.makePicker &&
