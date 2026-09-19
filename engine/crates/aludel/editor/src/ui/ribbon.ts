@@ -34,6 +34,8 @@ export interface RibbonDeps {
   ctx: () => CommandContext;
   sel: () => SelectionContext | null;
   runCommand: (id: string, from?: HTMLElement) => void;
+  /** 溢出菜单内的 picker 控件工厂（组被收进“更多”时控件仍可用）。 */
+  pickerFor?: (cmdId: string) => HTMLElement | null;
   /** 刷新后由 shell 调（组内还有 picker 控件需要回显）。 */
   onAfterRefresh?: () => void;
 }
@@ -264,7 +266,11 @@ export class Ribbon {
       used -= widths[i];
       this.overflowedGroups.unshift({
         name: g.dataset.group ?? "",
-        commands: [...g.querySelectorAll<HTMLElement>("[data-cmd]")].map((b) => b.dataset.cmd!),
+        // data-cmd 按钮与 picker 槽位一起收——picker 也有溢出路径，组被收走
+        // 不等于该格式通道消失（Word 溢出组的控件仍可达）。
+        commands: [
+          ...g.querySelectorAll<HTMLElement>("[data-cmd], .picker-slot"),
+        ].map((b) => b.dataset.cmd ?? b.dataset.picker ?? ""),
       });
     }
     overflow.style.display = this.overflowedGroups.length ? "" : "none";
@@ -276,8 +282,18 @@ export class Ribbon {
     for (const g of this.overflowedGroups) {
       if (g.name) menu.appendChild(el("div", "group-title", g.name));
       for (const id of g.commands) {
+        if (!id) continue;
         const cmd = this.deps.registry.get(id);
         if (!cmd) continue;
+        const picker = this.deps.pickerFor?.(id);
+        if (picker) {
+          // picker 命令：菜单项 = 标签 + 真实控件（控件写同一事务通道）
+          const row = el("div", "overflow-picker-row");
+          row.appendChild(el("span", "group-title", cmd.label));
+          row.appendChild(picker);
+          menu.appendChild(row);
+          continue;
+        }
         const it = cmdButton(null, cmd.id, cmd.label, cmd.shortcut);
         it.setAttribute("role", "menuitem");
         it.style.display = "flex";
@@ -294,5 +310,7 @@ export class Ribbon {
     menu.style.top = `${r.bottom + 2}px`;
     menu.style.position = "fixed";
     this.deps.overlays.show(menu, { restoreFocus: anchor, anchors: [anchor] });
+    // 新建控件的回显在菜单落位后做（控件聚焦时 reflectPickers 不回写，安全）
+    this.deps.onAfterRefresh?.();
   }
 }

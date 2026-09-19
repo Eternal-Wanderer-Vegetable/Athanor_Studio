@@ -125,6 +125,9 @@ select.mixed-value { font-style: italic; }
 .ribbon .overflow-btn { flex: 0 0 auto; }
 .ribbon .group.overflowed { display: none; }
 .ribbon-overflow-menu .group-title { padding: 4px 10px; font-size: 11px; color: var(--az-fg-dim); }
+/* 溢出菜单里的 picker 行：标签 + 控件（组被收走仍可选字体/行距/样式） */
+.overflow-picker-row { display: flex; align-items: center; gap: 8px; padding: 2px 6px 2px 0; }
+.overflow-picker-row .group-title { padding: 4px 0 4px 10px; }
 
 /* ---- 查找栏 ---- */
 #findbar {

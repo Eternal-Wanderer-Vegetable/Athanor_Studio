@@ -238,20 +238,22 @@ export class Shell {
       node.dataset.mixed = isMixed ? "true" : "";
       if (!isMixed && value) node.value = value;
     };
-    setSelect("tb-font", cf?.values.fontFamily ?? "", mixed.has("fontFamily"));
-    setSelect("tb-size", cf?.values.fontSizePt !== undefined ? String(cf!.values.fontSizePt) : "", mixed.has("fontSizePt"));
-    setSelect("fb-font", cf?.values.fontFamily ?? "", mixed.has("fontFamily"));
-    setSelect("fb-size", cf?.values.fontSizePt !== undefined ? String(cf!.values.fontSizePt) : "", mixed.has("fontSizePt"));
-    setColor("tb-color", cf?.values.color, mixed.has("color"));
-    setColor("fb-color", cf?.values.color, mixed.has("color"));
-    setColor("tb-highlight", cf?.values.highlight, mixed.has("highlight"));
-    setColor("fb-highlight", cf?.values.highlight, mixed.has("highlight"));
+    for (const prefix of ["tb", "fb", "ov"]) {
+      setSelect(`${prefix}-font`, cf?.values.fontFamily ?? "", mixed.has("fontFamily"));
+      setSelect(`${prefix}-size`,
+        cf?.values.fontSizePt !== undefined ? String(cf!.values.fontSizePt) : "",
+        mixed.has("fontSizePt"));
+      setColor(`${prefix}-color`, cf?.values.color, mixed.has("color"));
+      setColor(`${prefix}-highlight`, cf?.values.highlight, mixed.has("highlight"));
+    }
     // 段落/样式 picker：同一 SelectionContext 的归并视图
     const pf = sel?.paragraph;
     const pMixed = new Set(pf?.mixed ?? []);
-    setSelect("tb-lineheight",
-      pf?.values.lineHeight !== undefined ? String(pf!.values.lineHeight) : "",
-      pMixed.has("lineHeight"));
-    setSelect("tb-style", sel?.blockType ?? "", false);
+    for (const prefix of ["tb", "ov"]) {
+      setSelect(`${prefix}-lineheight`,
+        pf?.values.lineHeight !== undefined ? String(pf!.values.lineHeight) : "",
+        pMixed.has("lineHeight"));
+      setSelect(`${prefix}-style`, sel?.blockType ?? "", false);
+    }
   }
 }

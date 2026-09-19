@@ -150,6 +150,9 @@ const ribbon = new Ribbon({
   ctx,
   sel,
   runCommand,
+  // 溢出菜单里的 picker 与 ribbon 槽位共用控件工厂（id 前缀 ov-*，
+  // 回显仍走 SelectionContext —— reflectPickers 按 picker 前缀名单回写）。
+  pickerFor: (cmdId) => shell.createPicker(cmdId, "ov"),
   onAfterRefresh: () => {
     shell.fillPickerSlots();
     shell.reflectPickers();
