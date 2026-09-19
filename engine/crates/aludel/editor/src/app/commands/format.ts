@@ -182,7 +182,7 @@ export function formatCommands(deps: CommandDeps): RegDef[] {
       const r = anchor?.getBoundingClientRect();
       menu.style.left = `${Math.max(4, r?.left ?? 100)}px`;
       menu.style.top = `${(r?.bottom ?? 100) + 2}px`;
-      deps.overlays.show(menu, { restoreFocus: null });
+      deps.overlays.show(menu, { restoreFocus: null, trapTab: true });
     }, opts: {
       tab: "home", group: "段落", groupOrder: 30, elId: "tb-spacing",
       menu: "format", menuOrder: 16, focusPolicy: "keep", keywords: ["spacing", "duanjianju"],

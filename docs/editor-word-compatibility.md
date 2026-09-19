@@ -102,6 +102,9 @@
 | view.palette | 命令面板 | 工具 | 视图/工具 | — | Ctrl+K | — | implemented |
 | view.zoomIn / zoomOut / zoomReset | 放大/缩小/100% | 视图 | 视图/缩放 + 状态栏 | — | — | — | implemented |
 | file.verify | 检查文档 | 工具 | 审阅/校验 | — | — | — | implemented |
+| panels.outline | 大纲面板 | — | 导航轨 + 面板页签 | — | — | — | implemented |
+| panels.pages | 页面导航 | — | 导航轨 + 面板页签 | — | — | previewPaged | implemented（真实分页才列页码） |
+| panels.comments | 批注 | — | 导航轨 + 面板页签 | — | — | comments | gated（空态说明，无假列表） |
 | help.shortcuts | 快捷键一览 | 帮助 | — | — | — | — | implemented |
 | table.*（11 个） | 表格行列/单元格/属性 | — | 表格（上下文） | — | — | — | implemented（inTable gated） |
 

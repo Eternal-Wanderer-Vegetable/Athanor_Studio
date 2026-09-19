@@ -58,6 +58,7 @@ import { Ribbon } from "./ui/ribbon";
 import { CommandPalette } from "./ui/palette";
 import { FloatingBar } from "./ui/floating";
 import { Shell } from "./ui/shell";
+import { renderNavPages } from "./ui/nav-panel";
 import { renderOutline } from "./ui/outline-panel";
 import { renderReviewSections } from "./ui/review-panel";
 import { renderInspector } from "./ui/inspector-panel";
@@ -382,6 +383,32 @@ function currentPageNumber(): number | null {
   return null;
 }
 
+/** 页码 → 该页首个块 id（page_of_block 按文档序注入，首遇即首页）。 */
+function navPageList(): { page: number; blockId: string }[] {
+  if (!previewPages || previewPages.generation !== ctl.store.state.editGeneration) return [];
+  const first = new Map<number, string>();
+  for (const [blockId, page] of Object.entries(previewPages.pageOfBlock)) {
+    if (!first.has(page)) first.set(page, blockId);
+  }
+  return [...first.entries()].sort((a, b) => a[0] - b[0]).map(([page, blockId]) => ({ page, blockId }));
+}
+
+/** 页面导航：按块 id 跳转到文档位置（同一 selection/scroll 通道）。 */
+function gotoBlockId(blockId: string): void {
+  const v = ctl.view;
+  if (!v) return;
+  let pos: number | null = null;
+  v.state.doc.descendants((node, p) => {
+    if (pos !== null) return false;
+    if (node.attrs?.id === blockId) { pos = p; return false; }
+    return true;
+  });
+  if (pos === null) return;
+  const $pos = v.state.doc.resolve(Math.min(pos + 1, v.state.doc.content.size));
+  v.dispatch(v.state.tr.setSelection(TextSelection.near($pos)).scrollIntoView());
+  v.focus();
+}
+
 // ---------------------------------------------------------------- 统一刷新
 
 function refreshUI(): void {
@@ -430,6 +457,11 @@ function refreshUI(): void {
     viewMode,
   });
   renderInspector(sel());
+  renderNavPages({
+    pageList: navPageList(),
+    valid: previewPageCount() !== null,
+    onGoto: gotoBlockId,
+  });
   // 格式控件回显（含混合选区归并；IME 组合中不回写）
   if (ctl.view && !ctl.composing) {
     shell.reflectPickers();
@@ -545,6 +577,10 @@ async function boot(): Promise<void> {
 
   document.addEventListener("keydown", onKeydown);
   registry.onChange(refreshUI);
+
+  // 浮动条重定位：工作区滚动/窗口缩放时跟随选区（选区不变只移动，不重建）
+  document.querySelector(".workspace")?.addEventListener("scroll", () => floating.refresh());
+  window.addEventListener("resize", () => floating.refresh());
 
   window.addEventListener("beforeunload", (event) => {
     if (!ctl.store.state.dirty) return;

@@ -25,6 +25,8 @@ const PREF_THEME = "az.theme";
 const PREF_LEFT = "az.panel.left";
 const PREF_RIGHT = "az.panel.right";
 
+export type NavSection = "outline" | "pages" | "comments";
+
 const FONT_OPTIONS = ["", "宋体", "黑体", "微软雅黑", "仿宋", "楷体", "SimSun", "Georgia", "Consolas"];
 const SIZE_OPTIONS = ["", "9", "10.5", "12", "14", "16", "18", "22", "26", "36"];
 const LINE_HEIGHT_OPTIONS = ["", "1.0", "1.15", "1.5", "1.75", "2.0", "2.5", "3.0"];
@@ -52,6 +54,7 @@ export interface ShellDeps {
 
 export class Shell {
   theme: "light" | "dark";
+  private navSection: NavSection = "outline";
 
   constructor(private deps: ShellDeps) {
     this.theme = loadPref<"light" | "dark">(PREF_THEME, "light");
@@ -72,6 +75,28 @@ export class Shell {
     const open = !this.leftOpen;
     $("left-panel").classList.toggle("closed", !open);
     savePref(PREF_LEFT, open);
+    this.deps.refreshUI();
+  }
+
+  get nav(): NavSection {
+    return this.navSection;
+  }
+
+  /** 切到指定导航区并确保左面板打开（rail/页签共用入口）。 */
+  setNavSection(section: NavSection): void {
+    this.navSection = section;
+    const panel = $("left-panel");
+    if (panel.classList.contains("closed")) {
+      panel.classList.remove("closed");
+      savePref(PREF_LEFT, true);
+    }
+    for (const s of ["outline", "pages", "comments"] as const) {
+      const active = s === section;
+      const tab = document.getElementById(`nav-tab-${s}`);
+      tab?.setAttribute("aria-selected", active ? "true" : "false");
+      const sec = document.getElementById(`nav-section-${s}`);
+      if (sec) sec.hidden = !active;
+    }
     this.deps.refreshUI();
   }
 

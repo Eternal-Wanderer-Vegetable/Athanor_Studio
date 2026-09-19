@@ -4,7 +4,7 @@
 //! 审阅/工具/帮助域命令：文档检查（原“文档检查”菜单并入工具/审阅）、
 //! 快捷键一览。批注线程/修订追踪尚无模型能力——不放假入口。
 
-import { el, setMsg } from "../../ui/dom";
+import { el } from "../../ui/dom";
 import type { CommandDeps } from "./deps";
 import type { RegDef } from "./types";
 
@@ -17,10 +17,18 @@ export function toolsCommands(deps: CommandDeps): RegDef[] {
       keywords: ["verify", "jiancha"],
     } },
     // 修订历史/标注/损失盘点在检查面板中派生渲染；还原入口在历史列表项上。
+    // 导航面板：Outline/Pages/Comments 三个区的打开入口（rail 与面板页签共用）。
+    { id: "panels.outline", label: "大纲面板", run: () => deps.shell.setNavSection("outline"), opts: {
+      needsDoc: false, focusPolicy: "keep", keywords: ["outline", "dagang"],
+    } },
+    { id: "panels.pages", label: "页面导航", run: () => deps.shell.setNavSection("pages"), opts: {
+      caps: ["previewPaged"], needsDoc: false, focusPolicy: "keep",
+      keywords: ["pages", "yemian", "page"],
+    } },
     // 批注线程/trackedChanges/fields/toc/referenceCitations：模型未就绪（planned）。
     { id: "panels.comments", label: "批注", run: () => {
-      // 批注线程没有文档模型：显示诊断入口而不是空列表/假线程。
-      setMsg("批注功能暂不可用——文档模型未就绪，已在路线图中（不做假列表）。", true);
+      // 批注线程没有文档模型：打开面板显示真实空态说明（不放假列表）。
+      deps.shell.setNavSection("comments");
     }, opts: {
       needsDoc: false, focusPolicy: "keep",
       keywords: ["comment", "pizhu", "bizhu"],
