@@ -15,7 +15,7 @@ test("page settings apply, save and preserve imported theme fields", async ({ pa
   });
   await page.goto("/");
   await expect(page.locator(".ProseMirror")).toContainText("报告");
-  await page.locator("#tab-view").click();
+  await page.locator("#tab-layout").click();
   await page.getByRole("button", { name: "页面设置…", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   const dialog = page.getByRole("dialog");

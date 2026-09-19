@@ -12,10 +12,18 @@ import { FloatingBar } from "./floating";
 const CTX: CommandContext = {
   hasDocument: true,
   desktop: true,
+  capabilities: {
+    desktopFileDialogs: true, backgroundJobs: true, recoveryDrafts: true,
+    previewPaged: true, assetRegistry: true, comments: false,
+    trackedChanges: false, fields: false, toc: false, referenceCitations: false,
+  },
+  mode: "editing",
+  viewMode: "continuous",
   dirty: false,
   busy: false,
   hasSelection: true,
   inTable: false,
+  pageCount: null,
 };
 
 function selCtx(kind: SelectionContext["kind"] = "text"): SelectionContext {

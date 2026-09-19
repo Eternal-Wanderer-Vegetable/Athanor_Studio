@@ -100,7 +100,12 @@ export class Ribbon {
 
   private visibleTabs(): RibbonTab[] {
     const sel = this.deps.sel();
-    return RIBBON_TABS.filter((t) => !t.contextual || sel?.inTable).map((t) => t.id);
+    const ctx = this.deps.ctx();
+    // 上下文页签按选区；固定页签需至少一个可见命令——没有真实命令的页签
+    // 不渲染（能力诚实：不放空壳入口）。
+    return RIBBON_TABS
+      .filter((t) => (t.contextual ? sel?.inTable : this.deps.registry.byTab(t.id, ctx).length > 0))
+      .map((t) => t.id);
   }
 
   private selectTab(tab: RibbonTab): void {

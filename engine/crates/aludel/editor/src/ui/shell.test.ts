@@ -13,11 +13,11 @@ function hostDom(): void {
     <div id="right-panel"></div>`;
 }
 
-function selCtx(values: Record<string, unknown>, mixed: string[] = []): SelectionContext {
+function selCtx(values: SelectionContext["character"]["values"], mixed: string[] = []): SelectionContext {
   return {
     kind: "text",
     inTable: false,
-    character: { values: values as SelectionContext["character"]["values"], mixed: mixed as never },
+    character: { values, mixed: mixed as never },
     paragraph: { values: {}, mixed: [] },
   };
 }
@@ -25,7 +25,7 @@ function selCtx(values: Record<string, unknown>, mixed: string[] = []): Selectio
 function makeShell(current: SelectionContext | null): { shell: Shell; applied: Record<string, unknown>[] } {
   const applied: Record<string, unknown>[] = [];
   const shell = new Shell({
-    applyChar: (p) => applied.push(p),
+    applyChar: (p) => applied.push(p as unknown as Record<string, unknown>),
     refreshUI: () => {},
     sel: () => current,
   });

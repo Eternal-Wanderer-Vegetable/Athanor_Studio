@@ -53,32 +53,32 @@
 | format.size | 字号 | — | 开始/字体 | ✓ | — | — | implemented（picker） |
 | format.color | 文字颜色 | — | 开始/字体 | ✓ | — | — | implemented（picker） |
 | format.highlight | 高亮 | — | 开始/字体 | ✓ | — | — | implemented（picker） |
-| format.strong | 加粗 | 编辑 | 开始/字体 | ✓ | Ctrl+B | — | implemented |
-| format.em | 斜体 | 编辑 | 开始/字体 | ✓ | Ctrl+I | — | implemented |
-| format.underline | 下划线 | 编辑 | 开始/字体 | ✓ | Ctrl+U | — | implemented |
-| format.strike | 删除线 | — | 开始/字体 | ✓ | — | — | implemented |
-| format.code | 行内代码 | — | 开始/字体 | ✓ | — | — | implemented |
+| format.strong | 加粗 | 格式 | 开始/字体 | ✓ | Ctrl+B | — | implemented |
+| format.em | 斜体 | 格式 | 开始/字体 | ✓ | Ctrl+I | — | implemented |
+| format.underline | 下划线 | 格式 | 开始/字体 | ✓ | Ctrl+U | — | implemented |
+| format.strike | 删除线 | 格式 | 开始/字体 | ✓ | — | — | implemented |
+| format.code | 行内代码 | 格式 | 开始/字体 | ✓ | — | — | implemented |
 | format.link | 链接 | 插入 | 插入/链接 | ✓ | — | — | implemented |
-| format.clear | 清除格式 | 编辑 | 开始/段落 | — | — | — | implemented |
-| para.alignLeft | 左对齐 | — | 开始/段落 | — | — | — | implemented |
-| para.alignCenter | 居中 | — | 开始/段落 | — | — | — | implemented |
-| para.alignRight | 右对齐 | — | 开始/段落 | — | — | — | implemented |
-| para.alignJustify | 两端对齐 | — | 开始/段落 | — | — | — | implemented |
-| para.indentMore | 增加缩进 | — | 开始/段落 | — | — | — | implemented |
-| para.indentLess | 减少缩进 | — | 开始/段落 | — | — | — | implemented |
+| format.clear | 清除格式 | 格式 | 开始/段落 | — | — | — | implemented |
+| para.alignLeft | 左对齐 | 格式 | 开始/段落 | — | — | — | implemented |
+| para.alignCenter | 居中 | 格式 | 开始/段落 | — | — | — | implemented |
+| para.alignRight | 右对齐 | 格式 | 开始/段落 | — | — | — | implemented |
+| para.alignJustify | 两端对齐 | 格式 | 开始/段落 | — | — | — | implemented |
+| para.indentMore | 增加缩进 | 格式 | 开始/段落 | — | — | — | implemented |
+| para.indentLess | 减少缩进 | 格式 | 开始/段落 | — | — | — | implemented |
 | block.para | 正文 | — | 开始/样式 | — | — | — | implemented |
 | block.h1 / h2 / h3 | 标题 1/2/3 | — | 开始/样式 | — | — | — | implemented |
 | block.quote | 引用 | — | 开始/样式 | — | — | — | implemented |
 | block.codeblock | 代码块 | — | 开始/样式 | — | — | — | implemented |
-| list.bullet | 项目符号 | — | 开始/列表 | — | — | — | implemented |
-| list.ordered | 编号 | — | 开始/列表 | — | — | — | implemented |
-| list.outdent | 减少列表缩进 | — | 开始/列表 | — | — | — | implemented |
-| layout.pageSettings | 页面设置… | 视图 | 布局/页面 | — | — | — | implemented |
+| list.bullet | 项目符号 | — | 开始/段落 | — | — | — | implemented |
+| list.ordered | 编号 | — | 开始/段落 | — | — | — | implemented |
+| list.outdent | 减少列表缩进 | — | 开始/段落 | — | — | — | implemented |
+| layout.pageSettings | 页面设置… | 视图 | 布局/页面设置 | — | — | — | implemented |
 | insert.table | 表格 | 插入 | 插入/表格 | — | — | — | implemented |
 | insert.image | 图片 | 插入 | 插入/插图 | — | — | assetRegistry | implemented |
 | insert.math | 数学块 | 插入 | 插入/符号 | — | — | — | implemented |
-| insert.footnote | 脚注 | 插入 | 插入/符号 | — | — | — | implemented |
-| footnote.goto | 跳转脚注 | — | 插入/符号 | — | — | — | implemented |
+| insert.footnote | 脚注 | 插入 | 引用/脚注 | — | — | — | implemented |
+| footnote.goto | 跳转脚注 | — | 引用/脚注 | — | — | — | implemented |
 | insert.rule | 分隔线 | 插入 | 插入/符号 | — | — | — | implemented |
 | insert.pageBreak | 分页符 | 插入 | 插入/页面 | — | — | — | implemented |
 | view.preview | 打印预览 | 视图 | 视图/预览 | — | Ctrl+P | previewPaged | implemented |
@@ -86,9 +86,10 @@
 | view.toggleInspector | 检查面板 | 视图 | 视图/面板 | — | — | — | implemented |
 | view.ribbonCollapse | 折叠功能区 | 视图 | 视图/面板 | — | — | — | implemented |
 | view.theme | 深色主题 | 视图 | 视图/外观 | — | — | — | implemented |
-| view.palette | 命令面板 | 视图 | 视图/工具 | — | Ctrl+K | — | implemented |
+| view.palette | 命令面板 | 工具 | 视图/工具 | — | Ctrl+K | — | implemented |
 | view.zoomIn / zoomOut / zoomReset | 放大/缩小/100% | 视图 | 视图/缩放 + 状态栏 | — | — | — | implemented |
 | file.verify | 检查文档 | 工具 | 审阅/校验 | — | — | — | implemented |
+| help.shortcuts | 快捷键一览 | 帮助 | — | — | — | — | implemented |
 | table.*（11 个） | 表格行列/单元格/属性 | — | 表格（上下文） | — | — | — | implemented（inTable gated） |
 
 ## 能力清单（capability projection）

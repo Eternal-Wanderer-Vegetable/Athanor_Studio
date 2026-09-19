@@ -20,6 +20,7 @@ import { open as dialogOpen, save as dialogSave, confirm as dialogConfirm } from
 import type {
   DocResponse,
   DocumentGateway,
+  GatewayCapabilities,
   JobRequest,
   JobSnapshot,
   OpenResult,
@@ -33,6 +34,19 @@ const DOC_FILTER = { name: "Azodoc 文档", extensions: ["azodoc"] };
 
 export class TauriGateway implements DocumentGateway {
   readonly desktop = true;
+  readonly capabilities: GatewayCapabilities = {
+    desktopFileDialogs: true,
+    backgroundJobs: true,
+    recoveryDrafts: true,
+    previewPaged: true,
+    assetRegistry: true,
+    // 批注/修订追踪/字段/目录/引用尚无文档模型或网关通道：如实声明 false
+    comments: false,
+    trackedChanges: false,
+    fields: false,
+    toc: false,
+    referenceCitations: false,
+  };
 
   async newDocument(title?: string): Promise<OpenResult> {
     const r = await invoke<{ session_id: string; doc: OpenResult["doc"] }>("new_document", {
