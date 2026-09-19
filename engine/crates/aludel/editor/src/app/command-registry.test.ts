@@ -4,18 +4,39 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  buildCommandContext,
   CommandRegistry,
+  MENU_GROUPS,
+  RIBBON_TABS,
   type Command,
   type CommandContext,
 } from "./command-registry";
+import type { GatewayCapabilities } from "../platform/gateway";
+
+const CAPS: GatewayCapabilities = {
+  desktopFileDialogs: true,
+  backgroundJobs: true,
+  recoveryDrafts: true,
+  previewPaged: true,
+  assetRegistry: true,
+  comments: false,
+  trackedChanges: false,
+  fields: false,
+  toc: false,
+  referenceCitations: false,
+};
 
 const CTX: CommandContext = {
   hasDocument: true,
   desktop: true,
+  capabilities: CAPS,
+  mode: "editing",
+  viewMode: "continuous",
   dirty: false,
   busy: false,
   hasSelection: false,
   inTable: false,
+  pageCount: null,
 };
 
 function cmd(partial: Partial<Command> & { id: string }): Command {
@@ -86,5 +107,73 @@ describe("CommandRegistry projections", () => {
     await r.run("y", { ...CTX, hasSelection: true });
     expect(ran).toBe(1);
     expect(emitted).toBe(1);
+  });
+});
+
+describe("capability/mode projections", () => {
+  const HTTP_CAPS: GatewayCapabilities = { ...CAPS, desktopFileDialogs: false, backgroundJobs: false };
+  const http = { ...CTX, desktop: false, capabilities: HTTP_CAPS };
+
+  it("requiredCapabilities hides commands the platform cannot run", () => {
+    const r = new CommandRegistry();
+    r.register(cmd({ id: "file.open", tab: "home", group: "g", menu: "file", requiredCapabilities: ["desktopFileDialogs"] }));
+    r.register(cmd({ id: "edit.undo", tab: "home", group: "g", menu: "edit" }));
+    expect(r.byTab("home", http).map((c) => c.id)).toEqual(["edit.undo"]);
+    expect(r.byMenu("file", http)).toEqual([]);
+    expect(r.paletteCandidates(http).map((c) => c.id)).toEqual(["edit.undo"]);
+    expect(r.byMenu("file", CTX).map((c) => c.id)).toEqual(["file.open"]);
+  });
+
+  it("run refuses hidden commands (shortcut cannot bypass capability)", async () => {
+    const r = new CommandRegistry();
+    let ran = 0;
+    r.register(cmd({ id: "file.open", requiredCapabilities: ["desktopFileDialogs"], run: () => { ran += 1; } }));
+    await r.run("file.open", http);
+    expect(ran).toBe(0);
+    await r.run("file.open", CTX);
+    expect(ran).toBe(1);
+  });
+
+  it("modes restrict a command to the declared editor mode", () => {
+    const r = new CommandRegistry();
+    r.register(cmd({ id: "preview.only", modes: ["preview"], menu: "view" }));
+    expect(r.byMenu("view", { ...CTX, mode: "editing" })).toEqual([]);
+    expect(r.byMenu("view", { ...CTX, mode: "preview" }).map((c) => c.id)).toEqual(["preview.only"]);
+  });
+
+  it("review menu alias folds into tools", () => {
+    const r = new CommandRegistry();
+    r.register(cmd({ id: "file.verify", menu: "review" }));
+    expect(r.byMenu("tools", CTX).map((c) => c.id)).toEqual(["file.verify"]);
+    expect(r.byMenu("review", CTX).map((c) => c.id)).toEqual(["file.verify"]);
+  });
+
+  it("seven Word-style menu groups and six tabs plus contextual table", () => {
+    expect(MENU_GROUPS.map((g) => g.id)).toEqual(["file", "edit", "view", "insert", "format", "tools", "help"]);
+    expect(RIBBON_TABS.filter((t) => !t.contextual).map((t) => t.id)).toEqual(
+      ["home", "insert", "layout", "references", "view", "review"],
+    );
+    expect(RIBBON_TABS.find((t) => t.id === "table")?.contextual).toBe(true);
+  });
+
+  it("buildCommandContext centralizes mode/capability/selection/page state", () => {
+    const gw = { desktop: true, capabilities: CAPS };
+    const c = buildCommandContext({
+      gateway: gw, hasDocument: true, dirty: true, busy: false,
+      sel: { kind: "text", inTable: false, character: { values: {}, mixed: [] }, paragraph: { values: {}, mixed: [] }, blockType: "paragraph" },
+      viewMode: "page", previewOpen: false, pageCount: 3,
+    });
+    expect(c).toMatchObject({
+      mode: "editing", viewMode: "page", hasSelection: true,
+      inTable: false, pageCount: 3, dirty: true, desktop: true,
+    });
+    expect(buildCommandContext({
+      gateway: gw, hasDocument: true, dirty: false, busy: false,
+      sel: null, viewMode: "continuous", previewOpen: true, pageCount: 1,
+    }).mode).toBe("preview");
+    expect(buildCommandContext({
+      gateway: gw, hasDocument: false, dirty: false, busy: false,
+      sel: null, viewMode: "continuous", previewOpen: false, pageCount: null,
+    }).mode).toBe("noDocument");
   });
 });

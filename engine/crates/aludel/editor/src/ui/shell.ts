@@ -18,18 +18,35 @@
 //! 另提供字体/字号/颜色/高亮 picker 控件——ribbon 槽位与浮动条共用，
 //! 值仍经 applyChar → PM transaction 写入。
 
-import type { CharacterFormat, SelectionContext } from "../app/format";
+import type { CharacterFormat, ParagraphFormat, SelectionContext } from "../app/format";
 import { $, el, loadPref, savePref } from "./dom";
 
 const PREF_THEME = "az.theme";
 const PREF_LEFT = "az.panel.left";
 const PREF_RIGHT = "az.panel.right";
 
+export type NavSection = "outline" | "pages" | "comments";
+
 const FONT_OPTIONS = ["", "宋体", "黑体", "微软雅黑", "仿宋", "楷体", "SimSun", "Georgia", "Consolas"];
 const SIZE_OPTIONS = ["", "9", "10.5", "12", "14", "16", "18", "22", "26", "36"];
+const LINE_HEIGHT_OPTIONS = ["", "1.0", "1.15", "1.5", "1.75", "2.0", "2.5", "3.0"];
+/** 样式选择器：仅列出 schema 已有命令的块类型（无 schema 支撑的样式不出现）。 */
+const STYLE_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "样式" },
+  { value: "paragraph", label: "正文" },
+  { value: "heading1", label: "标题 1" },
+  { value: "heading2", label: "标题 2" },
+  { value: "heading3", label: "标题 3" },
+  { value: "quote", label: "引用" },
+  { value: "code_block", label: "代码块" },
+];
 
 export interface ShellDeps {
   applyChar: (patch: CharacterFormat) => void;
+  /** 段落格式事务（行距等 picker 的写入通道）。 */
+  applyPara?: (patch: ParagraphFormat) => void;
+  /** 块样式切换（样式选择器 → 既有 block.* 命令，不复制实现）。 */
+  runCommand?: (id: string) => void;
   /** 状态栏/检查器刷新（偏好变化也要刷新命令 active 态）。 */
   refreshUI: () => void;
   sel: () => SelectionContext | null;
@@ -37,6 +54,7 @@ export interface ShellDeps {
 
 export class Shell {
   theme: "light" | "dark";
+  private navSection: NavSection = "outline";
 
   constructor(private deps: ShellDeps) {
     this.theme = loadPref<"light" | "dark">(PREF_THEME, "light");
@@ -57,6 +75,28 @@ export class Shell {
     const open = !this.leftOpen;
     $("left-panel").classList.toggle("closed", !open);
     savePref(PREF_LEFT, open);
+    this.deps.refreshUI();
+  }
+
+  get nav(): NavSection {
+    return this.navSection;
+  }
+
+  /** 切到指定导航区并确保左面板打开（rail/页签共用入口）。 */
+  setNavSection(section: NavSection): void {
+    this.navSection = section;
+    const panel = $("left-panel");
+    if (panel.classList.contains("closed")) {
+      panel.classList.remove("closed");
+      savePref(PREF_LEFT, true);
+    }
+    for (const s of ["outline", "pages", "comments"] as const) {
+      const active = s === section;
+      const tab = document.getElementById(`nav-tab-${s}`);
+      tab?.setAttribute("aria-selected", active ? "true" : "false");
+      const sec = document.getElementById(`nav-section-${s}`);
+      if (sec) sec.hidden = !active;
+    }
     this.deps.refreshUI();
   }
 
@@ -126,6 +166,39 @@ export class Shell {
         input.addEventListener("input", () => this.deps.applyChar({ highlight: input.value }));
         return input;
       }
+      case "para.lineHeight": {
+        const sel = el("select") as HTMLSelectElement;
+        sel.id = `${prefix}-lineheight`;
+        sel.title = "行距";
+        sel.setAttribute("aria-label", "行距");
+        for (const s of LINE_HEIGHT_OPTIONS) {
+          sel.appendChild(new Option(s || "行距", s));
+        }
+        sel.addEventListener("change", () => {
+          const v = Number(sel.value);
+          this.deps.applyPara?.({ lineHeight: Number.isFinite(v) && v > 0 ? v : undefined });
+        });
+        return sel;
+      }
+      case "block.style": {
+        const sel = el("select") as HTMLSelectElement;
+        sel.id = `${prefix}-style`;
+        sel.title = "样式";
+        sel.setAttribute("aria-label", "样式");
+        for (const o of STYLE_OPTIONS) {
+          sel.appendChild(new Option(o.label, o.value));
+        }
+        sel.addEventListener("change", () => {
+          // 样式选择器把选项路由到既有 block.* 命令——不复制实现。
+          const map: Record<string, string> = {
+            paragraph: "block.para", heading1: "block.h1", heading2: "block.h2",
+            heading3: "block.h3", quote: "block.quote", code_block: "block.codeblock",
+          };
+          const cmdId = map[sel.value];
+          if (cmdId) this.deps.runCommand?.(cmdId);
+        });
+        return sel;
+      }
       default:
         return null;
     }
@@ -145,20 +218,42 @@ export class Shell {
     const sel = this.deps.sel();
     const cf = sel?.character;
     const mixed = new Set(cf?.mixed ?? []);
-    const set = (id: string, value: string, isMixed: boolean) => {
-      const node = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
+    const baseTitle = (node: HTMLElement): string =>
+      (node.dataset.baseTitle ??= node.title || node.getAttribute("aria-label") || "");
+    // select：混合态回退为空选项，附混合标记
+    const setSelect = (id: string, value: string, isMixed: boolean) => {
+      const node = document.getElementById(id) as HTMLSelectElement | null;
       if (!node || document.activeElement === node) return;
       node.value = isMixed ? "" : value;
-      node.title = isMixed ? "混合" : node.title.split("（混合）")[0];
+      node.title = isMixed ? `${baseTitle(node)}（混合）` : baseTitle(node);
       node.classList.toggle("mixed-value", isMixed);
     };
-    set("tb-font", cf?.values.fontFamily ?? "", mixed.has("fontFamily"));
-    set("tb-size", cf?.values.fontSizePt !== undefined ? String(cf!.values.fontSizePt) : "", mixed.has("fontSizePt"));
-    set("fb-font", cf?.values.fontFamily ?? "", mixed.has("fontFamily"));
-    set("fb-size", cf?.values.fontSizePt !== undefined ? String(cf!.values.fontSizePt) : "", mixed.has("fontSizePt"));
-    const colEl = document.getElementById("tb-color") as HTMLInputElement | null;
-    if (colEl && document.activeElement !== colEl && cf?.values.color) colEl.value = cf.values.color;
-    const hlEl = document.getElementById("tb-highlight") as HTMLInputElement | null;
-    if (hlEl && document.activeElement !== hlEl && cf?.values.highlight) hlEl.value = cf.values.highlight;
+    // input[type=color]：不能写空串——混合态只打标记，不把旧选区颜色
+    // 当当前值显示；统一值/无值时才回写或清除标记。
+    const setColor = (id: string, value: string | undefined, isMixed: boolean) => {
+      const node = document.getElementById(id) as HTMLInputElement | null;
+      if (!node || document.activeElement === node) return;
+      node.title = isMixed ? `${baseTitle(node)}（混合）` : baseTitle(node);
+      node.classList.toggle("mixed-value", isMixed);
+      node.dataset.mixed = isMixed ? "true" : "";
+      if (!isMixed && value) node.value = value;
+    };
+    for (const prefix of ["tb", "fb", "ov"]) {
+      setSelect(`${prefix}-font`, cf?.values.fontFamily ?? "", mixed.has("fontFamily"));
+      setSelect(`${prefix}-size`,
+        cf?.values.fontSizePt !== undefined ? String(cf!.values.fontSizePt) : "",
+        mixed.has("fontSizePt"));
+      setColor(`${prefix}-color`, cf?.values.color, mixed.has("color"));
+      setColor(`${prefix}-highlight`, cf?.values.highlight, mixed.has("highlight"));
+    }
+    // 段落/样式 picker：同一 SelectionContext 的归并视图
+    const pf = sel?.paragraph;
+    const pMixed = new Set(pf?.mixed ?? []);
+    for (const prefix of ["tb", "ov"]) {
+      setSelect(`${prefix}-lineheight`,
+        pf?.values.lineHeight !== undefined ? String(pf!.values.lineHeight) : "",
+        pMixed.has("lineHeight"));
+      setSelect(`${prefix}-style`, sel?.blockType ?? "", false);
+    }
   }
 }

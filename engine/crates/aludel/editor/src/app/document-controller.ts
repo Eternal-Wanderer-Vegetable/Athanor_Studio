@@ -603,6 +603,55 @@ export class DocumentController {
 
   // ---------------------------------------------------------------- 修订
 
+  // ---------------------------------------------------------------- 剪贴板
+  //
+  // 菜单/按钮触发的粘贴：读系统剪贴板 → 与原生粘贴同一 sanitize/资产路径。
+  // 原生 Ctrl+V/C/X 仍走 handleDOMEvents（pendingPasteMode），不经过这里。
+
+  /** 以指定模式粘贴系统剪贴板内容（keep/match/plain 与修饰键粘贴同语义）。 */
+  async pasteClipboard(mode: PasteMode): Promise<void> {
+    const v = this.view;
+    if (!v) return;
+    try {
+      const items = await navigator.clipboard.read();
+      const item = items[0];
+      if (!item) return;
+      const imageType = item.types.find((t) => t.startsWith("image/"));
+      if (imageType) {
+        const blob = await item.getType(imageType);
+        await this.insertImageFile(new File([blob], "pasted-image", { type: imageType }));
+        return;
+      }
+      if (mode !== "plain" && item.types.includes("text/html")) {
+        const html = await (await item.getType("text/html")).text();
+        const r = sanitizeHtml(html, mode);
+        v.pasteHTML(r.html);
+        const note = sanitizeNotice(r);
+        if (note) this.hooks.onMessage(note, true);
+        return;
+      }
+      if (item.types.includes("text/plain")) {
+        v.pasteText(await (await item.getType("text/plain")).text());
+      }
+    } catch (e) {
+      this.hooks.onMessage(`读取剪贴板失败: ${errText(e)}（需要剪贴板权限）`, false);
+    }
+  }
+
+  /** 当前选区纯文本（复制/剪切回退写入用；只读，不产生事务）。 */
+  selectionText(): string {
+    const v = this.view;
+    if (!v || v.state.selection.empty) return "";
+    const { from, to } = v.state.selection;
+    return v.state.doc.textBetween(from, to, "\n");
+  }
+
+  /** 删除当前选区内容（剪切的回退路径）。 */
+  deleteSelection(): void {
+    const v = this.view;
+    if (v && !v.state.selection.empty) v.dispatch(v.state.tr.deleteSelection());
+  }
+
   /** 还原到某修订快照（E5）。未保存改动先确认丢弃；
    *  修订未带主题快照时如实提示"仅正文历史"（主题继承最近状态）。 */
   async checkoutRevision(revId: string): Promise<void> {

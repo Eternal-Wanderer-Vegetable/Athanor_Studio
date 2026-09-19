@@ -97,7 +97,7 @@ export class AppMenus {
     const widths = visibleGroups.map((b) => b.offsetWidth);
     let used = widths.reduce((s, w) => s + w, 0);
     const reserve = 76;
-    // 窄屏（<900px）：低优先级菜单组（插入/视图/文档检查）直接进入“更多”
+    // 窄屏（<900px）：低优先级菜单组直接进入“更多”（文件/编辑/视图保持常驻）
     const narrow = window.innerWidth < 900;
     const hide = (btn: HTMLButtonElement, i: number) => {
       btn.dataset.overflowed = "true";
@@ -106,7 +106,7 @@ export class AppMenus {
       this.overflowedGroups.unshift(btn.dataset.menuGroup as MenuGroup);
     };
     if (narrow) {
-      const LOW_PRIORITY: MenuGroup[] = ["insert", "view", "review"];
+      const LOW_PRIORITY: MenuGroup[] = ["insert", "format", "tools", "help"];
       for (let i = visibleGroups.length - 1; i >= 0; i--) {
         const g = visibleGroups[i].dataset.menuGroup as MenuGroup;
         if (LOW_PRIORITY.includes(g)) hide(visibleGroups[i], i);

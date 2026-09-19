@@ -103,8 +103,8 @@ test("shortcut Ctrl+P triggers preview command via registry projection", async (
   await page.keyboard.press("Control+p");
   await expect(page.locator(".az-preview-overlay")).toBeVisible();
   await expect(page.locator(".az-preview-status")).toContainText("1 页");
-  // 状态栏同步最近预览页数（快照未失效）
-  await expect(page.locator("#sb-page")).toContainText("预览 1 页");
+  // 状态栏同步最近预览页数（快照未失效；光标块在映射内 → 显示当前页）
+  await expect(page.locator("#sb-page")).toContainText("第 1 / 1 页");
   await page.keyboard.press("Escape");
   await expect(page.locator(".az-preview-overlay")).toHaveCount(0);
 });

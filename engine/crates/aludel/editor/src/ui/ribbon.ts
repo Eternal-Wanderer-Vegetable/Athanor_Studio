@@ -34,6 +34,8 @@ export interface RibbonDeps {
   ctx: () => CommandContext;
   sel: () => SelectionContext | null;
   runCommand: (id: string, from?: HTMLElement) => void;
+  /** 溢出菜单内的 picker 控件工厂（组被收进“更多”时控件仍可用）。 */
+  pickerFor?: (cmdId: string) => HTMLElement | null;
   /** 刷新后由 shell 调（组内还有 picker 控件需要回显）。 */
   onAfterRefresh?: () => void;
 }
@@ -74,6 +76,7 @@ export class Ribbon {
       tab.type = "button";
       tab.id = `tab-${t.id}`;
       tab.setAttribute("role", "tab");
+      tab.setAttribute("aria-controls", "ribbon-panel");
       tab.textContent = t.label;
       tab.dataset.tab = t.id;
       if (t.contextual) tab.classList.add("contextual");
@@ -100,7 +103,12 @@ export class Ribbon {
 
   private visibleTabs(): RibbonTab[] {
     const sel = this.deps.sel();
-    return RIBBON_TABS.filter((t) => !t.contextual || sel?.inTable).map((t) => t.id);
+    const ctx = this.deps.ctx();
+    // 上下文页签按选区；固定页签需至少一个可见命令——没有真实命令的页签
+    // 不渲染（能力诚实：不放空壳入口）。
+    return RIBBON_TABS
+      .filter((t) => (t.contextual ? sel?.inTable : this.deps.registry.byTab(t.id, ctx).length > 0))
+      .map((t) => t.id);
   }
 
   private selectTab(tab: RibbonTab): void {
@@ -183,6 +191,7 @@ export class Ribbon {
       return;
     }
     panel.setAttribute("role", "tabpanel");
+    panel.setAttribute("aria-labelledby", `tab-${this.activeTab}`);
     panel.setAttribute("aria-label", RIBBON_TABS.find((t) => t.id === this.activeTab)?.label ?? "");
 
     panel.replaceChildren();
@@ -190,15 +199,20 @@ export class Ribbon {
     for (const g of this.deps.registry.groupsFor(this.activeTab, ctx)) {
       const group = el("div", "group");
       group.dataset.group = g.name;
+      const items = el("div", "group-items");
       for (const cmd of g.commands) {
-        // picker 型命令（字体/字号/颜色/高亮）由 shell 渲染专属控件
+        // picker 型命令（字体/字号/颜色/高亮/行距/样式）由 shell 渲染专属控件
         if (cmd.id === "format.font" || cmd.id === "format.size" ||
-            cmd.id === "format.color" || cmd.id === "format.highlight") {
-          group.appendChild(this.pickerSlot(cmd.id));
+            cmd.id === "format.color" || cmd.id === "format.highlight" ||
+            cmd.id === "para.lineHeight" || cmd.id === "block.style") {
+          items.appendChild(this.pickerSlot(cmd.id));
           continue;
         }
-        group.appendChild(cmdButton(cmd.elId ?? null, cmd.id, cmd.label, cmd.shortcut));
+        items.appendChild(cmdButton(cmd.elId ?? null, cmd.id, cmd.label, cmd.shortcut));
       }
+      group.appendChild(items);
+      // Word 风格组标题：可读的中文组名（溢出时整组收进“更多”）
+      if (g.name) group.appendChild(el("div", "group-label", g.name));
       panel.appendChild(group);
     }
     // 溢出按钮（占位；applyOverflow 决定是否可见）
@@ -252,7 +266,11 @@ export class Ribbon {
       used -= widths[i];
       this.overflowedGroups.unshift({
         name: g.dataset.group ?? "",
-        commands: [...g.querySelectorAll<HTMLElement>("[data-cmd]")].map((b) => b.dataset.cmd!),
+        // data-cmd 按钮与 picker 槽位一起收——picker 也有溢出路径，组被收走
+        // 不等于该格式通道消失（Word 溢出组的控件仍可达）。
+        commands: [
+          ...g.querySelectorAll<HTMLElement>("[data-cmd], .picker-slot"),
+        ].map((b) => b.dataset.cmd ?? b.dataset.picker ?? ""),
       });
     }
     overflow.style.display = this.overflowedGroups.length ? "" : "none";
@@ -264,8 +282,18 @@ export class Ribbon {
     for (const g of this.overflowedGroups) {
       if (g.name) menu.appendChild(el("div", "group-title", g.name));
       for (const id of g.commands) {
+        if (!id) continue;
         const cmd = this.deps.registry.get(id);
         if (!cmd) continue;
+        const picker = this.deps.pickerFor?.(id);
+        if (picker) {
+          // picker 命令：菜单项 = 标签 + 真实控件（控件写同一事务通道）
+          const row = el("div", "overflow-picker-row");
+          row.appendChild(el("span", "group-title", cmd.label));
+          row.appendChild(picker);
+          menu.appendChild(row);
+          continue;
+        }
         const it = cmdButton(null, cmd.id, cmd.label, cmd.shortcut);
         it.setAttribute("role", "menuitem");
         it.style.display = "flex";
@@ -282,5 +310,7 @@ export class Ribbon {
     menu.style.top = `${r.bottom + 2}px`;
     menu.style.position = "fixed";
     this.deps.overlays.show(menu, { restoreFocus: anchor, anchors: [anchor] });
+    // 新建控件的回显在菜单落位后做（控件聚焦时 reflectPickers 不回写，安全）
+    this.deps.onAfterRefresh?.();
   }
 }

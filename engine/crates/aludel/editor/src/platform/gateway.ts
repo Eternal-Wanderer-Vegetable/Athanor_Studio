@@ -16,6 +16,23 @@
 //! 平台抽象：UI 只面对 DocumentGateway；Tauri 与 HTTP 的能力差异显式声明，
 //! 不支持的操作返回 capability 标记或明确报错。
 
+/** 能力键：命令投影的 visible/enabled 依据（见 docs/editor-word-compatibility.md）。
+ *  没有对应文档模型或网关能力的功能不渲染可点击假入口。 */
+export type CapabilityKey =
+  | "desktopFileDialogs"
+  | "backgroundJobs"
+  | "recoveryDrafts"
+  | "previewPaged"
+  | "assetRegistry"
+  | "comments"
+  | "trackedChanges"
+  | "fields"
+  | "toc"
+  | "referenceCitations";
+
+/** 平台能力描述：两端都返回完整、稳定的对象；不支持项为 false。 */
+export type GatewayCapabilities = Record<CapabilityKey, boolean>;
+
 export interface DocResponse {
   path: string | null;
   fingerprint: string | null;
@@ -121,7 +138,10 @@ export interface StagedAssetRef {
 }
 
 export interface DocumentGateway {
+  /** 兼容别名：等价于 capabilities.desktopFileDialogs；保留到所有调用方迁移完毕。 */
   readonly desktop: boolean;
+  /** 只读能力矩阵：命令投影的唯一能力事实源。 */
+  readonly capabilities: GatewayCapabilities;
 
   newDocument(title?: string): Promise<OpenResult>;
   openDocument(path: string): Promise<OpenResult>;

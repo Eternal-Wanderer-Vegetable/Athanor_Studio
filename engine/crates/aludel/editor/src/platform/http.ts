@@ -19,6 +19,7 @@
 import type {
   DocResponse,
   DocumentGateway,
+  GatewayCapabilities,
   JobRequest,
   JobSnapshot,
   OpenResult,
@@ -43,6 +44,18 @@ function unsupported(name: string): never {
 
 export class HttpGateway implements DocumentGateway {
   readonly desktop = false;
+  readonly capabilities: GatewayCapabilities = {
+    desktopFileDialogs: false,
+    backgroundJobs: false,
+    recoveryDrafts: false,
+    previewPaged: true,
+    assetRegistry: true,
+    comments: false,
+    trackedChanges: false,
+    fields: false,
+    toc: false,
+    referenceCitations: false,
+  };
   private sessionId = "__http__";
 
   async newDocument(): Promise<OpenResult> {

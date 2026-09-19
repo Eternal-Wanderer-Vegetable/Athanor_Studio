@@ -24,6 +24,8 @@ export interface OverlayOptions {
   onClose?: () => void;
   /** 点击这些元素不算“外部”（例如菜单触发按钮）。 */
   anchors?: HTMLElement[];
+  /** Tab 键在覆盖层内循环（非菜单浮层的焦点围栏；菜单自带 Tab=关闭）。 */
+  trapTab?: boolean;
 }
 
 interface OpenOverlay {
@@ -31,6 +33,7 @@ interface OpenOverlay {
   restoreFocus: HTMLElement | null;
   onClose?: () => void;
   anchors: HTMLElement[];
+  trapTab: boolean;
 }
 
 export class OverlayController {
@@ -51,6 +54,7 @@ export class OverlayController {
           : opts.restoreFocus,
       onClose: opts.onClose,
       anchors: opts.anchors ?? [],
+      trapTab: opts.trapTab ?? false,
     };
     document.body.appendChild(el);
   }
@@ -74,12 +78,29 @@ export class OverlayController {
     this.close();
   }
 
-  /** document keydown 路由：Escape 关闭（返回是否已处理）。 */
+  /** document keydown 路由：Escape 关闭；trapTab 覆盖层的 Tab 焦点围栏
+   *  （返回是否已处理）。菜单自身把 Tab 映射为关闭，不经此路径。 */
   handleKeydown(e: KeyboardEvent): boolean {
-    if (e.key !== "Escape" || !this.open) return false;
-    e.preventDefault();
-    e.stopPropagation();
-    this.close();
-    return true;
+    if (!this.open) return false;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      this.close();
+      return true;
+    }
+    if (e.key === "Tab" && this.open.trapTab && this.open.el.contains(e.target as HTMLElement)) {
+      const focusables = [...this.open.el.querySelectorAll<HTMLElement>(
+        "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])",
+      )].filter((n) => !n.hasAttribute("disabled") && n.offsetParent !== null);
+      if (focusables.length === 0) return false;
+      e.preventDefault();
+      const i = focusables.indexOf(document.activeElement as HTMLElement);
+      const next = e.shiftKey
+        ? focusables[(i - 1 + focusables.length) % focusables.length]
+        : focusables[(i + 1) % focusables.length];
+      next.focus();
+      return true;
+    }
+    return false;
   }
 }

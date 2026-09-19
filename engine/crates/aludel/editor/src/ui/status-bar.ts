@@ -29,6 +29,10 @@ export interface StatusBarParams {
   zoom: number;
   /** 最近预览的有效页数（快照未失效）；null = 无有效分页数据。 */
   pageCount: number | null;
+  /** 光标所在块的页码（同一快照内；无分页数据时 null）。 */
+  currentPage: number | null;
+  /** 视图模式（连续/页宽；页面视图由预览浮层承担）。 */
+  viewMode: string;
 }
 
 export function renderStatusBar(params: StatusBarParams): void {
@@ -46,10 +50,19 @@ export function renderStatusBar(params: StatusBarParams): void {
   save.className = params.dirty ? "dirty" : "";
   const page = $("sb-page");
   if (page) {
-    page.textContent = params.pageCount !== null ? `预览 ${params.pageCount} 页` : "";
+    page.textContent =
+      params.pageCount !== null && params.currentPage !== null
+        ? `第 ${params.currentPage} / ${params.pageCount} 页`
+        : params.pageCount !== null
+          ? `预览 ${params.pageCount} 页`
+          : "";
     page.title = params.pageCount !== null
-      ? "最近一次打印预览的分页结果（快照有效）"
+      ? "最近一次打印预览的分页结果（快照有效；非连续布局的实时页码）"
       : "";
+  }
+  const mode = $("sb-mode");
+  if (mode) {
+    mode.textContent = params.viewMode === "pageWidth" ? "页宽视图" : "连续编辑";
   }
   $("sb-zoom").textContent = `${Math.round(params.zoom * 100)}%`;
   document.title = `Athanor Studio — ${params.displayName}${params.dirty ? " *" : ""}`;

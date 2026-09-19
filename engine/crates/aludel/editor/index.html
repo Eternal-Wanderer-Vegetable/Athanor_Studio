@@ -6,17 +6,19 @@
   <title>Athanor Studio</title>
 </head>
 <body>
-  <div class="topbar">
-    <div class="appbar">
+  <header class="topbar">
+    <div class="appbar" role="banner">
       <span class="brand">Athanor</span>
       <span class="doc-name" id="doc-path">…</span>
-      <span class="doc-name">修订: <span id="rev">—</span></span>
+      <span class="doc-status" id="doc-status">
+        <span class="doc-name">修订: <span id="rev">—</span></span>
+      </span>
       <span class="spacer"></span>
       <input class="cmd-search" id="cmdk-input" type="text" placeholder="命令搜索 (Ctrl+K)" aria-label="命令搜索" readonly />
       <button id="topbar-save" data-cmd="file.save">保存</button>
     </div>
-    <div class="menubar" role="menubar" aria-label="应用菜单" id="app-menus"></div>
-  </div>
+    <nav class="menubar" role="menubar" aria-label="应用菜单" id="app-menus"></nav>
+  </header>
 
   <div class="tabbar" role="tablist" aria-label="功能区页签" id="ribbon-tabs"></div>
   <div class="ribbon" role="toolbar" aria-label="编辑工具栏" id="ribbon-panel"></div>
@@ -36,41 +38,65 @@
   </div>
 
   <main>
-    <div class="rail" role="navigation" aria-label="导航轨" id="left-rail">
+    <nav class="rail" role="navigation" aria-label="导航轨" id="left-rail">
       <button id="rail-outline" data-cmd="view.toggleOutline" title="大纲" aria-label="大纲面板">≡</button>
+      <button id="rail-pages" data-cmd="panels.pages" title="页面" aria-label="页面导航">▦</button>
       <button id="rail-find" data-cmd="edit.find" title="查找" aria-label="查找">⌕</button>
-    </div>
-    <div class="nav-pane" id="left-panel" aria-label="文档大纲">
-      <h2>大纲</h2>
-      <ul id="outline"></ul>
-    </div>
+      <button id="rail-comments" data-cmd="panels.comments" title="批注" aria-label="批注">✎</button>
+    </nav>
+    <aside class="nav-pane" id="left-panel" aria-label="导航面板">
+      <div class="nav-tabs" role="tablist" aria-label="导航视图">
+        <button id="nav-tab-outline" data-cmd="panels.outline" role="tab" aria-selected="true" aria-controls="nav-section-outline">大纲</button>
+        <button id="nav-tab-pages" data-cmd="panels.pages" role="tab" aria-selected="false" aria-controls="nav-section-pages">页面</button>
+        <button id="nav-tab-comments" data-cmd="panels.comments" role="tab" aria-selected="false" aria-controls="nav-section-comments">批注</button>
+      </div>
+      <section id="nav-section-outline" role="tabpanel" aria-labelledby="nav-tab-outline">
+        <h2>大纲</h2>
+        <ul id="outline"></ul>
+      </section>
+      <section id="nav-section-pages" role="tabpanel" aria-labelledby="nav-tab-pages" hidden>
+        <h2>页面</h2>
+        <div id="nav-pages"></div>
+      </section>
+      <section id="nav-section-comments" role="tabpanel" aria-labelledby="nav-tab-comments" hidden>
+        <h2>批注</h2>
+        <div id="nav-comments">
+          <p class="nav-empty">批注线程需要文档模型能力（comments 能力未就绪）。此面板只显示真实状态，不提供假列表。</p>
+        </div>
+      </section>
+    </aside>
     <div class="workspace">
       <div class="page"><div id="editor" aria-label="文档正文" role="textbox" aria-multiline="true"></div></div>
     </div>
-    <div class="side-pane inspector-pane" id="right-panel" aria-label="检查面板">
+    <aside class="side-pane inspector-pane" id="right-panel" aria-label="检查面板">
       <section id="inspector-context"><h2>属性</h2><div id="inspector-body"></div></section>
       <section><h2>修订历史</h2><ul id="history"></ul></section>
       <section><h2>语义标注</h2><ul id="annotations"></ul></section>
       <section><h2>未知内容 / 损失盘点</h2><ul id="loss"></ul></section>
       <section><h2>容器警告</h2><ul id="warnings"></ul></section>
-    </div>
+    </aside>
   </main>
 
   <div class="bar">
     <input id="message" placeholder="修订说明（可选）" aria-label="修订说明" />
   </div>
   <div id="msg" role="status" aria-live="polite"></div>
-  <div class="statusbar" role="status" aria-label="状态栏">
+  <footer class="statusbar" role="status" aria-label="状态栏">
     <span id="sb-chars">0 字</span>
     <span id="sb-save">已保存</span>
     <span id="sb-page" title="最近预览分页结果"></span>
     <span id="sb-mode">连续编辑</span>
     <span id="sb-lang">中文</span>
     <span class="spacer"></span>
+    <span id="sb-view" class="sb-view-slot">
+      <button id="sb-view-continuous" data-cmd="view.modeContinuous" title="连续编辑">连续</button>
+      <button id="sb-view-pagewidth" data-cmd="view.modePageWidth" title="页宽视图">页宽</button>
+      <button id="sb-view-page" data-cmd="view.pageView" title="页面视图（预览）">页面</button>
+    </span>
     <button id="sb-zoom-out" data-cmd="view.zoomOut" aria-label="缩小">−</button>
     <button id="sb-zoom-reset" data-cmd="view.zoomReset" aria-label="缩放还原"><span id="sb-zoom">100%</span></button>
     <button id="sb-zoom-in" data-cmd="view.zoomIn" aria-label="放大">＋</button>
-  </div>
+  </footer>
 
   <script>
     window.addEventListener("error", (e) => {
