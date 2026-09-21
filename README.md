@@ -132,6 +132,33 @@ athanor recover broken.azodoc -o recovered/
 All failures are four-line friendly errors: *what happened / the file is not
 broken / what to do / the recovery command*.
 
+## Desktop app
+
+The editor is also a native desktop app (Tauri 2 shell, `engine/crates/studio`).
+Prebuilt installers are attached to each [release](../../releases) — CI builds
+them automatically on `v*` tags, with a bundled Pandoc so DOCX import/export
+works out of the box:
+
+| Platform | Artifact | Notes |
+| --- | --- | --- |
+| Windows | `Athanor Studio_<ver>_x64-setup.exe` | NSIS installer; embeds the WebView2 bootstrapper |
+| Windows | `AthanorStudio_<ver>_x64_portable.zip` | No install; unzip and run `studio.exe` |
+| Linux | `Athanor Studio_<ver>_amd64.AppImage` | No install; `chmod +x` and run |
+| Linux | `athanor-studio_<ver>_amd64.deb` | `sudo apt install ./…deb` |
+
+Requirements: on Windows, WebView2 Runtime (preinstalled on Windows 10/11; the
+installer offers to add it); on Linux, WebKitGTK 4.1 (the deb pulls it in as a
+dependency). PDF publishing uses any Chromium-family browser found on the
+machine — none is bundled.
+
+Build locally from source:
+
+```bash
+cd engine/crates/aludel/editor
+npm install          # first time only
+npm run tauri:build  # NSIS (Windows) / AppImage + deb (Linux), under target/release/bundle/
+```
+
 ## Container at a glance
 
 ```
