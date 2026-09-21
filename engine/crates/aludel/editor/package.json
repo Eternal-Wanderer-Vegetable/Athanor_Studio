@@ -10,7 +10,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "tauri:build": "npm run build && cd ../../studio && node ../aludel/editor/node_modules/@tauri-apps/cli/tauri.js build"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
@@ -27,6 +28,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "@tauri-apps/cli": "^2.11.5",
     "jsdom": "^30.1.0",
     "typescript": "~5.8.0",
     "vite": "^6.3.0",

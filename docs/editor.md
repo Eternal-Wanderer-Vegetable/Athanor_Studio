@@ -151,3 +151,25 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-studio.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-studio.ps1 -SkipFrontendBuild
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-studio.ps1 -Dev
 ```
+
+### 9.1 本地打包（双击即用的安装包）
+
+```bash
+cd engine/crates/aludel/editor
+npm install          # 仅首次
+npm run tauri:build  # 内部先 tsc + vite 构建前端，再 tauri build
+```
+
+产物位于 `engine/target/release/bundle/`：Windows 出 NSIS 安装包
+（`nsis/*.exe`），Linux 出 AppImage 与 deb。应用图标源图为
+`engine/crates/studio/icons/app-icon.svg`，改动后用
+`npx @tauri-apps/cli icon` 重新生成全套尺寸。
+
+### 9.2 发布与桌面冒烟
+
+- 推送 `v*` tag 触发 `.github/workflows/release.yml`：Windows/Linux 双平台
+  自动构建（注入版本号、内置 Pandoc 走 Tauri resources、启动时经
+  `resource_dir` 注入 `AZODOC_PANDOC_PATH`），产物挂到 GitHub Release；
+  `workflow_dispatch` 可不发版演练。
+- 桌面冒烟：Windows `scripts/windows-smoke.ps1`；Linux
+  `bash scripts/linux-smoke.sh`（xvfb 虚显）。CI 中均为手动 job。

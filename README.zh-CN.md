@@ -113,6 +113,31 @@ athanor recover broken.azodoc -o recovered/
 
 所有失败都是四段式友好错误：*发生了什么 / 文件没有损坏 / 该做什么 / 恢复命令*。
 
+## 桌面应用
+
+编辑器同时是一个原生桌面应用（Tauri 2 壳，`engine/crates/studio`）。每个
+[Release](../../releases) 都附有预编译安装包——推送 `v*` tag 后 CI 自动构建，
+并内置 Pandoc，DOCX 导入导出开箱即用：
+
+| 平台 | 产物 | 说明 |
+| --- | --- | --- |
+| Windows | `Athanor Studio_<ver>_x64-setup.exe` | NSIS 安装包，内嵌 WebView2 引导器 |
+| Windows | `AthanorStudio_<ver>_x64_portable.zip` | 免安装，解压运行 `studio.exe` |
+| Linux | `Athanor Studio_<ver>_amd64.AppImage` | 免安装，`chmod +x` 后直接运行 |
+| Linux | `athanor-studio_<ver>_amd64.deb` | `sudo apt install ./…deb` |
+
+环境要求：Windows 需 WebView2 Runtime（Win10/11 通常已内置，安装包可补装）；
+Linux 需 WebKitGTK 4.1（deb 包会作为依赖自动拉起）。PDF 出版使用机器上已有的
+任意 Chromium 系浏览器，不随包捆绑。
+
+从源码本地打包：
+
+```bash
+cd engine/crates/aludel/editor
+npm install          # 仅首次
+npm run tauri:build  # Windows 出 NSIS，Linux 出 AppImage + deb，位于 target/release/bundle/
+```
+
 ## 容器速览
 
 ```

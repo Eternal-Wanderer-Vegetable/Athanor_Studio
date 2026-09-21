@@ -70,9 +70,49 @@ fn percent_decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
+/// 注册随发布包内置的 Pandoc（DOCX 桥接）：在 Tauri 资源目录的
+/// `tools/pandoc-*/` 下探测可执行文件并写入 `AZODOC_PANDOC_PATH`
+/// （`azodoc_docx::bridge::find_pandoc` 的最高优先级入口）。三种安装布局
+/// 由此统一覆盖：Windows 安装目录、deb `/usr/lib/<identifier>/`、
+/// AppImage 挂载点同名子目录。本地开发（无内置资源）为空操作。
+fn register_builtin_pandoc(app: &tauri::App) {
+    use tauri::Manager;
+    let Ok(resource_dir) = app.path().resource_dir() else {
+        return;
+    };
+    let Ok(entries) = std::fs::read_dir(resource_dir.join("tools")) else {
+        return;
+    };
+    let mut versions: Vec<_> = entries
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with("pandoc-"))
+        })
+        .collect();
+    versions.sort();
+    let Some(latest) = versions.pop() else {
+        return;
+    };
+    let bin = latest.join(if cfg!(windows) {
+        "pandoc.exe"
+    } else {
+        "pandoc"
+    });
+    if bin.is_file() {
+        std::env::set_var("AZODOC_PANDOC_PATH", &bin);
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            register_builtin_pandoc(app);
+            Ok(())
+        })
         .manage(sessions::SessionRegistry::default())
         .manage(jobs::JobManager::default())
         .register_uri_scheme_protocol("azodoc-asset", asset_uri_response)

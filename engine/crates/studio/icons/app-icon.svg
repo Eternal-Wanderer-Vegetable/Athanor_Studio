@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Athanor Studio app icon: the alchemist's furnace — a crucible with fire. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#26305a"/>
+      <stop offset="1" stop-color="#0d1126"/>
+    </linearGradient>
+    <linearGradient id="cup" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6d7996"/>
+      <stop offset="1" stop-color="#2f3858"/>
+    </linearGradient>
+    <linearGradient id="fire" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#ff7a2f"/>
+      <stop offset="1" stop-color="#ffd166"/>
+    </linearGradient>
+    <linearGradient id="fireCore" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#ffb347"/>
+      <stop offset="1" stop-color="#fff3c4"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" rx="220" fill="url(#bg)"/>
+
+  <!-- outer flame -->
+  <path d="M512 168
+           C 562 264, 660 330, 660 452
+           C 660 542, 594 602, 512 602
+           C 430 602, 364 542, 364 452
+           C 364 330, 462 264, 512 168 Z"
+        fill="url(#fire)"/>
+  <!-- inner flame -->
+  <path d="M512 336
+           C 540 394, 588 428, 588 496
+           C 588 552, 554 586, 512 586
+           C 470 586, 436 552, 436 496
+           C 436 428, 484 394, 512 336 Z"
+        fill="url(#fireCore)"/>
+
+  <!-- crucible rim -->
+  <rect x="292" y="610" width="440" height="62" rx="31" fill="#8b96b5"/>
+  <!-- crucible body -->
+  <path d="M340 660
+           L684 660
+           L646 846
+           C 639 879, 610 902, 576 902
+           L448 902
+           C 414 902, 385 879, 378 846 Z"
+        fill="url(#cup)"/>
+</svg>
